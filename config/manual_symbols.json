@@ -1,0 +1,12 @@
+{
+"0x00331800": {"name": "sceSifGetOtherData", "src": "sifrpc.o+0x4E0, order-aligned"},
+"0x00331958": {"name": "_search_svdata",     "src": "sifrpc.o+0x648, masked-sig"},
+"0x003319A8": {"name": "_alarm_bind",        "src": "sifrpc.o+0x698, masked-sig"},
+"0x003319E8": {"name": "_request_bind",      "src": "sifrpc.o+0x6D8, masked-sig"},
+"0x00331AB8": {"name": "sceSifBindRpc",      "src": "sifrpc.o+0x7A8; IDA: sends SIF cmd 0x80000009, writes cd->command/serve/tid"},
+"0x00331BF8": {"name": "_request_call",      "src": "sifrpc.o+0x8F8, masked-sig"},
+"0x00331C88": {"name": "sceSifCallRpc",      "src": "sifrpc.o+0x988; IDA: sends SIF cmd 0x8000000A, stores gp/func/para at cd+24/28/32"},
+"0x00331620": {"name": "_request_end",       "src": "sifrpc.o+0x300, masked-sig"},
+"0x003316F0": {"name": "_alarm_rdata",       "src": "sifrpc.o+0x3D0, masked-sig"},
+"0x00331730": {"name": "_request_rdata",     "src": "sifrpc.o+0x410, masked-sig"}
+}

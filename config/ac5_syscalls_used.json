@@ -1,0 +1,554 @@
+{
+ "60": {
+  "names": [
+   "RFU060"
+  ],
+  "sites": [
+   "0031C2F8"
+  ]
+ },
+ "61": {
+  "names": [
+   "RFU061"
+  ],
+  "sites": [
+   "0031C314"
+  ]
+ },
+ "35": {
+  "names": [
+   "ExitThread"
+  ],
+  "sites": [
+   "0031C384"
+  ]
+ },
+ "2": {
+  "names": [
+   "SetGsCrt"
+  ],
+  "sites": [
+   "0032F5A4"
+  ]
+ },
+ "128": {
+  "names": [],
+  "sites": [
+   "0032C624"
+  ]
+ },
+ "7": {
+  "names": [
+   "_ExecPS2"
+  ],
+  "sites": [
+   "0032F5F4"
+  ]
+ },
+ "13": {
+  "names": [
+   "SetVTLBRefillHandler"
+  ],
+  "sites": [
+   "0032F654"
+  ]
+ },
+ "14": {
+  "names": [
+   "SetVCommonHandler"
+  ],
+  "sites": [
+   "0032F664"
+  ]
+ },
+ "16": {
+  "names": [
+   "AddIntcHandler",
+   "AddIntcHandler2"
+  ],
+  "sites": [
+   "0032F694"
+  ]
+ },
+ "17": {
+  "names": [
+   "RemoveIntcHandler"
+  ],
+  "sites": [
+   "0032F6A4"
+  ]
+ },
+ "18": {
+  "names": [
+   "AddDmacHandler",
+   "AddDmacHandler2"
+  ],
+  "sites": [
+   "0032F6B4",
+   "0032F6C4"
+  ]
+ },
+ "19": {
+  "names": [
+   "RemoveDmacHandler"
+  ],
+  "sites": [
+   "0032F6D4"
+  ]
+ },
+ "20": {
+  "names": [
+   "_EnableIntc"
+  ],
+  "sites": [
+   "0032F6E4"
+  ]
+ },
+ "21": {
+  "names": [
+   "_DisableIntc"
+  ],
+  "sites": [
+   "0032F6F4"
+  ]
+ },
+ "22": {
+  "names": [
+   "_EnableDmac"
+  ],
+  "sites": [
+   "0032F704"
+  ]
+ },
+ "23": {
+  "names": [
+   "_DisableDmac"
+  ],
+  "sites": [
+   "0032F714"
+  ]
+ },
+ "-26": {
+  "names": [
+   "_iEnableIntc"
+  ],
+  "sites": [
+   "0032F744"
+  ]
+ },
+ "-27": {
+  "names": [
+   "_iDisableIntc"
+  ],
+  "sites": [
+   "0032F754"
+  ]
+ },
+ "-28": {
+  "names": [
+   "_iEnableDmac"
+  ],
+  "sites": [
+   "0032F764"
+  ]
+ },
+ "-29": {
+  "names": [
+   "_iDisableDmac"
+  ],
+  "sites": [
+   "0032F774"
+  ]
+ },
+ "32": {
+  "names": [
+   "CreateThread"
+  ],
+  "sites": [
+   "0032F7A4"
+  ]
+ },
+ "34": {
+  "names": [
+   "_StartThread"
+  ],
+  "sites": [
+   "0032F7C4"
+  ]
+ },
+ "36": {
+  "names": [
+   "ExitDeleteThread"
+  ],
+  "sites": [
+   "0032F7E4"
+  ]
+ },
+ "41": {
+  "names": [
+   "ChangeThreadPriority"
+  ],
+  "sites": [
+   "0032F834"
+  ]
+ },
+ "43": {
+  "names": [
+   "RotateThreadReadyQueue"
+  ],
+  "sites": [
+   "0032F854"
+  ]
+ },
+ "47": {
+  "names": [
+   "GetThreadId"
+  ],
+  "sites": [
+   "0032F894"
+  ]
+ },
+ "48": {
+  "names": [
+   "ReferThreadStatus"
+  ],
+  "sites": [
+   "0032F8A4"
+  ]
+ },
+ "50": {
+  "names": [
+   "SleepThread"
+  ],
+  "sites": [
+   "0032F8C4"
+  ]
+ },
+ "51": {
+  "names": [
+   "WakeupThread"
+  ],
+  "sites": [
+   "0032F8D4"
+  ]
+ },
+ "-52": {
+  "names": [
+   "_iWakeupThread"
+  ],
+  "sites": [
+   "0032F8E4"
+  ]
+ },
+ "55": {
+  "names": [
+   "SuspendThread"
+  ],
+  "sites": [
+   "0032F914"
+  ]
+ },
+ "-56": {
+  "names": [
+   "_iSuspendThread"
+  ],
+  "sites": [
+   "0032F924"
+  ]
+ },
+ "62": {
+  "names": [
+   "EndOfHeap"
+  ],
+  "sites": [
+   "0032F984"
+  ]
+ },
+ "64": {
+  "names": [
+   "CreateSema"
+  ],
+  "sites": [
+   "0032F9A4"
+  ]
+ },
+ "65": {
+  "names": [
+   "DeleteSema"
+  ],
+  "sites": [
+   "0032F9B4"
+  ]
+ },
+ "66": {
+  "names": [
+   "SignalSema"
+  ],
+  "sites": [
+   "0032F9C4"
+  ]
+ },
+ "-67": {
+  "names": [
+   "iSignalSema"
+  ],
+  "sites": [
+   "0032F9D4"
+  ]
+ },
+ "68": {
+  "names": [
+   "WaitSema"
+  ],
+  "sites": [
+   "0032F9E4"
+  ]
+ },
+ "69": {
+  "names": [
+   "PollSema"
+  ],
+  "sites": [
+   "0032F9F4"
+  ]
+ },
+ "71": {
+  "names": [
+   "ReferSemaStatus"
+  ],
+  "sites": [
+   "0032FA14"
+  ]
+ },
+ "74": {
+  "names": [
+   "SetOsdConfigParam"
+  ],
+  "sites": [
+   "0032FA44"
+  ]
+ },
+ "75": {
+  "names": [
+   "GetOsdConfigParam"
+  ],
+  "sites": [
+   "0032FA54"
+  ]
+ },
+ "100": {
+  "names": [
+   "FlushCache"
+  ],
+  "sites": [
+   "0032FC24"
+  ]
+ },
+ "107": {
+  "names": [
+   "sceSifStopDma"
+  ],
+  "sites": [
+   "0032FC74"
+  ]
+ },
+ "112": {
+  "names": [
+   "GsGetIMR"
+  ],
+  "sites": [
+   "0032FCC4"
+  ]
+ },
+ "113": {
+  "names": [
+   "GsPutIMR"
+  ],
+  "sites": [
+   "0032FCE4"
+  ]
+ },
+ "115": {
+  "names": [
+   "SetVSyncFlag"
+  ],
+  "sites": [
+   "0032FD14"
+  ]
+ },
+ "118": {
+  "names": [
+   "sceSifDmaStat"
+  ],
+  "sites": [
+   "0032FD44"
+  ]
+ },
+ "119": {
+  "names": [
+   "sceSifSetDma"
+  ],
+  "sites": [
+   "0032FD64"
+  ]
+ },
+ "-119": {
+  "names": [
+   "isceSifSetDma"
+  ],
+  "sites": [
+   "0032FD74"
+  ]
+ },
+ "120": {
+  "names": [
+   "sceSifSetDChain"
+  ],
+  "sites": [
+   "0032FD84"
+  ]
+ },
+ "-120": {
+  "names": [
+   "isceSifSetDChain"
+  ],
+  "sites": [
+   "0032FD94"
+  ]
+ },
+ "121": {
+  "names": [
+   "sceSifSetReg"
+  ],
+  "sites": [
+   "0032FDA4"
+  ]
+ },
+ "122": {
+  "names": [
+   "sceSifGetReg"
+  ],
+  "sites": [
+   "0032FDB4"
+  ]
+ },
+ "124": {
+  "names": [
+   "Deci2Call"
+  ],
+  "sites": [
+   "0032FDD4"
+  ]
+ },
+ "127": {
+  "names": [
+   "GetMemorySize"
+  ],
+  "sites": [
+   "0032FE04"
+  ]
+ },
+ "130": {
+  "names": [
+   "_InitTLB"
+  ],
+  "sites": [
+   "0032FE14"
+  ]
+ },
+ "90": {
+  "names": [
+   "Copy"
+  ],
+  "sites": [
+   "00337124",
+   "0033736C",
+   "003374DC",
+   "0033778C",
+   "0033A1BC"
+  ]
+ },
+ "131": {
+  "names": [
+   "FindAddress"
+  ],
+  "sites": [
+   "003371AC"
+  ]
+ },
+ "116": {
+  "names": [
+   "RFU116",
+   "setup"
+  ],
+  "sites": [
+   "003372F4",
+   "0033735C",
+   "0033751C",
+   "0033777C",
+   "0033A214"
+  ]
+ },
+ "91": {
+  "names": [
+   "GetEntryAddress",
+   "RFU091"
+  ],
+  "sites": [
+   "003373B4",
+   "003377D4",
+   "0033A204"
+  ]
+ },
+ "6": {
+  "names": [
+   "_LoadExecPS2"
+  ],
+  "sites": [
+   "0032F5E4"
+  ]
+ },
+ "4": {
+  "names": [
+   "_Exit"
+  ],
+  "sites": [
+   "0032F5C4"
+  ]
+ },
+ "123": {
+  "names": [
+   "_ExecOSD"
+  ],
+  "sites": [
+   "0032FDC4"
+  ]
+ },
+ "-47": {
+  "names": [
+   "iSuspendThread",
+   "iWakeupThread"
+  ],
+  "sites": [
+   "00339430",
+   "00339548"
+  ]
+ },
+ "86": {
+  "names": [
+   "RFU086_WaitEvnetFlag",
+   "_SetTLBEntry"
+  ],
+  "sites": [
+   "0033A30C"
+  ]
+ },
+ "-84": {
+  "names": [
+   "_kTLBException"
+  ],
+  "sites": [
+   "0033A718"
+  ]
+ }
+}

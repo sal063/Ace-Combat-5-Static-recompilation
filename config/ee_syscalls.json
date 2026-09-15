@@ -1,0 +1,444 @@
+{
+ "-255": [
+  "iReleaseAlarm"
+ ],
+ "-254": [
+  "iSetAlarm"
+ ],
+ "-120": [
+  "isceSifSetDChain"
+ ],
+ "-119": [
+  "isceSifSetDma"
+ ],
+ "-118": [
+  "isceSifDmaStat"
+ ],
+ "-113": [
+  "iGsPutIMR"
+ ],
+ "-112": [
+  "iGsGetIMR"
+ ],
+ "-106": [
+  "iCpuConfig"
+ ],
+ "-104": [
+  "iFlushCache"
+ ],
+ "-103": [
+  "iGetCop0"
+ ],
+ "-95": [
+  "iDisableDmacHandler"
+ ],
+ "-94": [
+  "iEnableDmacHandler"
+ ],
+ "-93": [
+  "iDisableIntcHandler"
+ ],
+ "-92": [
+  "iEnableIntcHandler"
+ ],
+ "-90": [
+  "RFU090_iReferEventFlagStatus"
+ ],
+ "-88": [
+  "RFU088_iPollEvnetFlag",
+  "iProbeTLBEntry"
+ ],
+ "-87": [
+  "iGetTLBEntry"
+ ],
+ "-86": [
+  "iSetTLBEntry"
+ ],
+ "-85": [
+  "RFU085_iClearEventFlag",
+  "iPutTLBEntry"
+ ],
+ "-84": [
+  "_kTLBException"
+ ],
+ "-83": [
+  "RFU083_iSetEventFlag"
+ ],
+ "-72": [
+  "iReferSemaStatus"
+ ],
+ "-70": [
+  "iPollSema"
+ ],
+ "-67": [
+  "iSignalSema"
+ ],
+ "-58": [
+  "iResumeThread"
+ ],
+ "-56": [
+  "_iSuspendThread"
+ ],
+ "-54": [
+  "iCancelWakeupThread"
+ ],
+ "-52": [
+  "_iWakeupThread"
+ ],
+ "-49": [
+  "iReferThreadStatus"
+ ],
+ "-47": [
+  "iSuspendThread",
+  "iWakeupThread"
+ ],
+ "-46": [
+  "iReleaseWaitThread"
+ ],
+ "-44": [
+  "_iRotateThreadReadyQueue"
+ ],
+ "-42": [
+  "iChangeThreadPriority"
+ ],
+ "-38": [
+  "iTerminateThread"
+ ],
+ "-29": [
+  "_iDisableDmac"
+ ],
+ "-28": [
+  "_iEnableDmac"
+ ],
+ "-27": [
+  "_iDisableIntc"
+ ],
+ "-26": [
+  "_iEnableIntc"
+ ],
+ "0": [
+  "RFU000_FullReset"
+ ],
+ "1": [
+  "ResetEE"
+ ],
+ "2": [
+  "SetGsCrt"
+ ],
+ "3": [
+  "RFU003"
+ ],
+ "4": [
+  "_Exit"
+ ],
+ "5": [
+  "RFU005"
+ ],
+ "6": [
+  "_LoadExecPS2"
+ ],
+ "7": [
+  "_ExecPS2"
+ ],
+ "8": [
+  "RFU008"
+ ],
+ "9": [
+  "RFU009"
+ ],
+ "10": [
+  "AddSbusIntcHandler"
+ ],
+ "11": [
+  "RemoveSbusIntcHandler"
+ ],
+ "12": [
+  "Interrupt2Iop"
+ ],
+ "13": [
+  "SetVTLBRefillHandler"
+ ],
+ "14": [
+  "SetVCommonHandler"
+ ],
+ "15": [
+  "SetVInterruptHandler"
+ ],
+ "16": [
+  "AddIntcHandler",
+  "AddIntcHandler2"
+ ],
+ "17": [
+  "RemoveIntcHandler"
+ ],
+ "18": [
+  "AddDmacHandler",
+  "AddDmacHandler2"
+ ],
+ "19": [
+  "RemoveDmacHandler"
+ ],
+ "20": [
+  "_EnableIntc"
+ ],
+ "21": [
+  "_DisableIntc"
+ ],
+ "22": [
+  "_EnableDmac"
+ ],
+ "23": [
+  "_DisableDmac"
+ ],
+ "32": [
+  "CreateThread"
+ ],
+ "33": [
+  "DeleteThread"
+ ],
+ "34": [
+  "_StartThread"
+ ],
+ "35": [
+  "ExitThread"
+ ],
+ "36": [
+  "ExitDeleteThread"
+ ],
+ "37": [
+  "TerminateThread"
+ ],
+ "39": [
+  "DisableDispatchThread"
+ ],
+ "40": [
+  "EnableDispatchThread"
+ ],
+ "41": [
+  "ChangeThreadPriority"
+ ],
+ "43": [
+  "RotateThreadReadyQueue"
+ ],
+ "45": [
+  "ReleaseWaitThread"
+ ],
+ "47": [
+  "GetThreadId"
+ ],
+ "48": [
+  "ReferThreadStatus"
+ ],
+ "50": [
+  "SleepThread"
+ ],
+ "51": [
+  "WakeupThread"
+ ],
+ "53": [
+  "CancelWakeupThread"
+ ],
+ "55": [
+  "SuspendThread"
+ ],
+ "57": [
+  "ResumeThread"
+ ],
+ "59": [
+  "JoinThread"
+ ],
+ "60": [
+  "RFU060"
+ ],
+ "61": [
+  "RFU061"
+ ],
+ "62": [
+  "EndOfHeap"
+ ],
+ "63": [
+  "RFU063"
+ ],
+ "64": [
+  "CreateSema"
+ ],
+ "65": [
+  "DeleteSema"
+ ],
+ "66": [
+  "SignalSema"
+ ],
+ "68": [
+  "WaitSema"
+ ],
+ "69": [
+  "PollSema"
+ ],
+ "71": [
+  "ReferSemaStatus"
+ ],
+ "73": [
+  "RFU073"
+ ],
+ "74": [
+  "SetOsdConfigParam"
+ ],
+ "75": [
+  "GetOsdConfigParam"
+ ],
+ "76": [
+  "GetGsHParam"
+ ],
+ "77": [
+  "GetGsVParam"
+ ],
+ "78": [
+  "SetGsHParam"
+ ],
+ "79": [
+  "SetGsVParam"
+ ],
+ "80": [
+  "RFU080_CreateEventFlag"
+ ],
+ "81": [
+  "RFU081_DeleteEventFlag"
+ ],
+ "82": [
+  "RFU082_SetEventFlag"
+ ],
+ "84": [
+  "RFU084_ClearEventFlag"
+ ],
+ "85": [
+  "PutTLBEntry"
+ ],
+ "86": [
+  "RFU086_WaitEvnetFlag",
+  "_SetTLBEntry"
+ ],
+ "87": [
+  "GetTLBEntry",
+  "RFU087_PollEvnetFlag"
+ ],
+ "88": [
+  "ProbeTLBEntry"
+ ],
+ "89": [
+  "ExpandScratchPad",
+  "RFU089_ReferEventFlagStatus"
+ ],
+ "90": [
+  "Copy"
+ ],
+ "91": [
+  "GetEntryAddress",
+  "RFU091"
+ ],
+ "92": [
+  "EnableIntcHandler"
+ ],
+ "93": [
+  "DisableIntcHandler"
+ ],
+ "94": [
+  "EnableDmacHandler"
+ ],
+ "95": [
+  "DisableDmacHandler"
+ ],
+ "96": [
+  "KSeg0"
+ ],
+ "97": [
+  "EnableCache"
+ ],
+ "98": [
+  "DisableCache"
+ ],
+ "99": [
+  "GetCop0"
+ ],
+ "100": [
+  "FlushCache"
+ ],
+ "102": [
+  "CpuConfig"
+ ],
+ "107": [
+  "sceSifStopDma"
+ ],
+ "108": [
+  "SetCPUTimerHandler"
+ ],
+ "109": [
+  "SetCPUTimer"
+ ],
+ "110": [
+  "SetOsdConfigParam2"
+ ],
+ "111": [
+  "GetOsdConfigParam2"
+ ],
+ "112": [
+  "GsGetIMR"
+ ],
+ "113": [
+  "GsPutIMR"
+ ],
+ "114": [
+  "SetPgifHandler"
+ ],
+ "115": [
+  "SetVSyncFlag"
+ ],
+ "116": [
+  "RFU116",
+  "setup"
+ ],
+ "117": [
+  "_print"
+ ],
+ "118": [
+  "sceSifDmaStat"
+ ],
+ "119": [
+  "sceSifSetDma"
+ ],
+ "120": [
+  "sceSifSetDChain"
+ ],
+ "121": [
+  "sceSifSetReg"
+ ],
+ "122": [
+  "sceSifGetReg"
+ ],
+ "123": [
+  "_ExecOSD"
+ ],
+ "124": [
+  "Deci2Call"
+ ],
+ "125": [
+  "PSMode"
+ ],
+ "126": [
+  "MachineType"
+ ],
+ "127": [
+  "GetMemorySize"
+ ],
+ "130": [
+  "_InitTLB"
+ ],
+ "131": [
+  "FindAddress"
+ ],
+ "252": [
+  "SetAlarm"
+ ],
+ "253": [
+  "ReleaseAlarm"
+ ]
+}

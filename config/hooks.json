@@ -1,0 +1,11 @@
+{
+"0x0031CF00": "hook_scene",
+"0x002E6068": "hook_radio_queue",
+"0x002E6F50": "hook_radio_request",
+"0x002E7B70": "hook_radio_select",
+"0x0031CF88": "hook_scene_next",
+"0x0035A974": "hook_file_open",
+"0x0034B998": "hook_sound_load",
+"0x0035ED24": "hook_dev_lookup",
+"0x0035B804": "hook_path_split"
+}
