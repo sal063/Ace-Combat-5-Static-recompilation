@@ -30,16 +30,6 @@ enum { PS2_ASPECT_STRETCH, PS2_ASPECT_AUTO, PS2_ASPECT_4_3, PS2_ASPECT_16_9,
        PS2_ASPECT_CUSTOM };
 enum { PS2_PRESENT_MAILBOX, PS2_PRESENT_FIFO, PS2_PRESENT_IMMEDIATE,
        PS2_PRESENT_FIFO_RELAXED };
-enum { PS2_DZ_AXIAL, PS2_DZ_RADIAL, PS2_DZ_SCALED_RADIAL };
-
-typedef struct {
-    int   shape;
-    float inner;
-    float outer;
-    float curve;
-    int   invert_x, invert_y;
-} ps2_stick_cfg;
-
 #define PS2_INTERNAL_RES_MAX 8
 
 typedef struct ps2_settings {
@@ -71,10 +61,10 @@ typedef struct ps2_settings {
     int   block_input_in_menu;
     int   key[PS2_ACT_COUNT][PS2_BIND_SLOTS];
     int   pad[PS2_ACT_COUNT][PS2_BIND_SLOTS];
-    ps2_stick_cfg stick[2];
-    float trigger_deadzone;
-    float trigger_press;
-    float axis_press;
+    float deadzone;
+    float axis_scale;
+    float button_deadzone;
+    int   invert[2];
 } ps2_settings;
 
 extern ps2_settings ps2_cfg;
@@ -100,8 +90,11 @@ const char *ps2_padbind_name(int code);
 
 void ps2_settings_apply_game_patches(void);
 
-void ps2_stick_process(const ps2_stick_cfg *c, float x, float y,
-                       float *ox, float *oy);
+float ps2_pad_axis_value(int raw, int positive);
+void  ps2_pad_stick(float deadzone, float axis_scale, int invert, const float v[4],
+                    unsigned char *x, unsigned char *y);
+int   ps2_pad_trigger(float button_deadzone, float value, unsigned char *pressure);
+int   ps2_pad_button(float button_deadzone, float value);
 
 #ifdef __cplusplus
 }

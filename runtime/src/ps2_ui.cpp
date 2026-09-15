@@ -694,13 +694,18 @@ void tab_controller() {
 
 void stick_view(int s, float size) {
     SDL_Gamepad *g = ps2_video_gamepad();
-    float rx = 0.0f, ry = 0.0f, ox, oy;
+    int ax = 0, ay = 0;
     if (g) {
-        rx = (float)SDL_GetGamepadAxis(g, s ? SDL_GAMEPAD_AXIS_RIGHTX : SDL_GAMEPAD_AXIS_LEFTX) / 32767.0f;
-        ry = (float)SDL_GetGamepadAxis(g, s ? SDL_GAMEPAD_AXIS_RIGHTY : SDL_GAMEPAD_AXIS_LEFTY) / 32767.0f;
+        ax = SDL_GetGamepadAxis(g, s ? SDL_GAMEPAD_AXIS_RIGHTX : SDL_GAMEPAD_AXIS_LEFTX);
+        ay = SDL_GetGamepadAxis(g, s ? SDL_GAMEPAD_AXIS_RIGHTY : SDL_GAMEPAD_AXIS_LEFTY);
     }
-    const ps2_stick_cfg &c = ps2_cfg.stick[s];
-    ps2_stick_process(&c, rx, ry, &ox, &oy);
+    const float v[4] = { ps2_pad_axis_value(ay, 0), ps2_pad_axis_value(ay, 1),
+                         ps2_pad_axis_value(ax, 0), ps2_pad_axis_value(ax, 1) };
+    unsigned char bx, by;
+    ps2_pad_stick(ps2_cfg.deadzone, ps2_cfg.axis_scale, ps2_cfg.invert[s], v, &bx, &by);
+    float rx = v[3] - v[2], ry = v[1] - v[0];
+    float ox = bx < 127 ? -(127 - bx) / 127.0f : (bx - 127) / 128.0f;
+    float oy = by < 127 ? -(127 - by) / 127.0f : (by - 127) / 128.0f;
 
     ImVec2 p = ImGui::GetCursorScreenPos();
     ImGui::Dummy(ImVec2(size, size));
@@ -708,98 +713,83 @@ void stick_view(int s, float size) {
     float r = size * 0.5f - 4.0f;
     ImVec2 ctr = p + ImVec2(size * 0.5f, size * 0.5f);
     dl->AddRectFilled(p, p + ImVec2(size, size), IM_COL32(18, 24, 22, 255), 6.0f);
-    const ImU32 dz = IM_COL32(190, 70, 70, 80);
-    if (c.shape == PS2_DZ_AXIAL) {
-        float d = r * c.inner;
-        dl->AddRectFilled(ctr + ImVec2(-d, -r), ctr + ImVec2(d, r), dz);
-        dl->AddRectFilled(ctr + ImVec2(-r, -d), ctr + ImVec2(r, d), dz);
-    } else {
-        dl->AddCircleFilled(ctr, r * c.inner, dz, 48);
-    }
+    float scale = ps2_cfg.axis_scale > 0.01f ? ps2_cfg.axis_scale : 0.01f;
+    float dzr = ps2_cfg.deadzone / scale;
+    if (dzr > 0.0f)
+        dl->AddCircleFilled(ctr, r * (dzr < 1.0f ? dzr : 1.0f), IM_COL32(190, 70, 70, 80), 48);
     dl->AddLine(ctr - ImVec2(r, 0.0f), ctr + ImVec2(r, 0.0f), IM_COL32(60, 72, 66, 255));
     dl->AddLine(ctr - ImVec2(0.0f, r), ctr + ImVec2(0.0f, r), IM_COL32(60, 72, 66, 255));
     dl->AddCircle(ctr, r, IM_COL32(130, 150, 140, 255), 64, 1.5f);
-    if (c.outer > 0.0f) dl->AddCircle(ctr, r * (1.0f - c.outer), IM_COL32(100, 120, 110, 200), 64, 1.0f);
+    if (scale > 1.0f) dl->AddCircle(ctr, r / scale, IM_COL32(100, 120, 110, 200), 64, 1.0f);
     dl->AddCircleFilled(ctr + ImVec2(rx * r, ry * r), 4.0f, IM_COL32(210, 210, 210, 220));
     dl->AddCircleFilled(ctr + ImVec2(ox * r, oy * r), 5.5f, IM_COL32(100, 235, 130, 255));
+    ImGui::Text("X %3u  Y %3u", (unsigned)bx, (unsigned)by);
 }
 
 void tab_analog() {
-    ImGui::TextWrapped("How it worked before this menu: each stick axis had its own dead zone -- a "
-                       "square around the centre -- of 24%% of travel on the left stick and 26.5%% "
-                       "on the right (Microsoft's XInput recommendations), rescaled so movement "
-                       "starts smoothly at its edge. Triggers ignored the first 10%% as resting "
-                       "noise and counted as held past 24%%. Those are still the defaults.");
-    env_note("PS2_PAD_DEADZONE", "overrides both sticks' dead zones");
+    ImGui::TextWrapped("These are PCSX2's DualShock 2 analog settings, and the game receives what "
+                       "PCSX2 would send it for the same controller: sensitivity is applied first, "
+                       "a stick inside the dead zone's circle reads as centred, and movement "
+                       "outside it is passed on as it is, not rescaled. The defaults are PCSX2's: "
+                       "no dead zone and 133%% sensitivity.");
+    env_note("PS2_PAD_DEADZONE", "overrides the analog dead zone");
     if (!ps2_video_gamepad())
         ImGui::TextDisabled("Connect a controller to see the live preview.");
     else
         ImGui::TextDisabled("Preview: grey is the raw stick, green is what the game receives.");
 
-    static const char *const SHAPES[] = {
-        "Axial (square, per axis)", "Radial (circle)", "Scaled radial (circle, smoothest)",
+    static const char *const INVERT[] = {
+        "Not inverted", "Invert left/right", "Invert up/down", "Invert left/right + up/down",
     };
+    bool ch = false;
+    ch |= slider_pct("Analog dead zone", &ps2_cfg.deadzone, 0.0f, 1.0f);
+    help("PCSX2's Analog Deadzone: the fraction of stick movement that is ignored, for both "
+         "sticks. It is a circle, measured after sensitivity. Raise it if the aircraft drifts "
+         "with the stick released.");
+    ch |= slider_pct("Analog sensitivity", &ps2_cfg.axis_scale, 0.01f, 2.0f);
+    help("PCSX2's Analog Sensitivity: the stick axis scaling factor. PCSX2 recommends 130% to "
+         "140% for recent controllers such as the DualShock 4 or Xbox One controller.");
+    ch |= slider_pct("Button / trigger dead zone", &ps2_cfg.button_deadzone, 0.0f, 1.0f);
+    help("PCSX2's Button/Trigger Deadzone: how far a trigger, or a stick bound to a button, "
+         "travels before it counts as pressed at all.");
+    ch |= ImGui::Combo("Invert left stick", &ps2_cfg.invert[0], INVERT, 4);
+    ch |= ImGui::Combo("Invert right stick", &ps2_cfg.invert[1], INVERT, 4);
+    if (ImGui::Button("Reset to PCSX2 defaults")) {
+        ps2_settings d;
+        ps2_settings_defaults(&d);
+        ps2_cfg.deadzone = d.deadzone;
+        ps2_cfg.axis_scale = d.axis_scale;
+        ps2_cfg.button_deadzone = d.button_deadzone;
+        ps2_cfg.invert[0] = d.invert[0];
+        ps2_cfg.invert[1] = d.invert[1];
+        ch = true;
+    }
+    if (ch) changed(0);
+
     float view = ImGui::GetFontSize() * 11.0f;
-    for (int s = 0; s < 2; s++) {
-        ImGui::PushID(s);
-        ImGui::SeparatorText(s ? "Right stick" : "Left stick");
-        if (ImGui::BeginTable("stick", 2, ImGuiTableFlags_SizingStretchProp)) {
-            ImGui::TableSetupColumn("controls", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("view", ImGuiTableColumnFlags_WidthFixed, view + 8.0f);
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
-            ps2_stick_cfg &c = ps2_cfg.stick[s];
-            bool ch = false;
-            ch |= ImGui::Combo("Shape", &c.shape, SHAPES, 3);
-            help("Axial zeroes each axis on its own, which snaps small diagonals onto the axes. "
-                 "Radial treats the stick as the circle it is. Scaled radial also rescales so "
-                 "movement starts smoothly at the dead zone's edge -- usually best for flying.");
-            ch |= slider_pct("Dead zone", &c.inner, 0.0f, 0.9f);
-            help("Travel ignored around the centre. Raise it if the aircraft drifts with the "
-                 "stick released; lower it for finer control.");
-            ch |= slider_pct("Outer dead zone", &c.outer, 0.0f, 0.5f);
-            help("Travel at the rim that already counts as full deflection, for sticks that "
-                 "never quite reach their edge.");
-            ch |= ImGui::SliderFloat("Response curve", &c.curve, 0.3f, 3.0f, "%.2f");
-            help("1.00 is linear. Above 1, small movements become finer while full deflection "
-                 "is unchanged -- steadier aiming. Below 1 the stick reacts sharply near centre.");
-            bool ix = c.invert_x != 0, iy = c.invert_y != 0;
-            if (ImGui::Checkbox("Invert X", &ix)) { c.invert_x = ix; ch = true; }
-            ImGui::SameLine();
-            if (ImGui::Checkbox("Invert Y", &iy)) { c.invert_y = iy; ch = true; }
-            ImGui::SameLine();
-            if (ImGui::Button("Reset")) {
-                ps2_settings d;
-                ps2_settings_defaults(&d);
-                c = d.stick[s];
-                ch = true;
-            }
-            if (ch) changed(0);
-            ImGui::TableSetColumnIndex(1);
+    if (ImGui::BeginTable("sticks", 2, ImGuiTableFlags_SizingFixedFit)) {
+        for (int s = 0; s < 2; s++) {
+            ImGui::TableNextColumn();
+            ImGui::PushID(s);
+            ImGui::TextUnformatted(s ? "Right stick" : "Left stick");
             stick_view(s, view);
-            ImGui::EndTable();
+            ImGui::PopID();
         }
-        ImGui::PopID();
+        ImGui::EndTable();
     }
 
-    ImGui::SeparatorText("Triggers and stick-as-button");
-    bool ch = false;
-    ch |= slider_pct("Trigger dead zone", &ps2_cfg.trigger_deadzone, 0.0f, 0.5f);
-    help("Resting noise a trigger ignores before it counts at all. Measured from where the "
-         "trigger rests when the controller connects.");
-    ch |= slider_pct("L2 / R2 press point", &ps2_cfg.trigger_press, 0.02f, 1.0f);
-    help("How far a trigger travels before the game sees L2 or R2 held.");
-    ch |= slider_pct("Stick-as-button press point", &ps2_cfg.axis_press, 0.1f, 0.95f);
-    help("When a stick direction is bound to a button on the Controller tab, how far the "
-         "stick must be pushed to press it.");
-    if (ch) changed(0);
     if (SDL_Gamepad *g = ps2_video_gamepad()) {
+        ImGui::SeparatorText("Triggers");
         for (int t = 0; t < 2; t++) {
-            float v = (float)SDL_GetGamepadAxis(g, t ? SDL_GAMEPAD_AXIS_RIGHT_TRIGGER
-                                                     : SDL_GAMEPAD_AXIS_LEFT_TRIGGER) / 32767.0f;
-            char overlay[32];
-            snprintf(overlay, sizeof overlay, "%s raw %.0f%%", t ? "R2" : "L2", (double)(v * 100.0f));
-            ImGui::ProgressBar(v < 0.0f ? 0.0f : v, ImVec2(-FLT_MIN, 0.0f), overlay);
+            int raw = SDL_GetGamepadAxis(g, t ? SDL_GAMEPAD_AXIS_RIGHT_TRIGGER
+                                              : SDL_GAMEPAD_AXIS_LEFT_TRIGGER);
+            float v = ps2_pad_axis_value(raw, 1);
+            unsigned char pressure;
+            int held = ps2_pad_trigger(ps2_cfg.button_deadzone, v, &pressure);
+            char overlay[48];
+            snprintf(overlay, sizeof overlay, "%s raw %.0f%%  %s, pressure %u", t ? "R2" : "L2",
+                     (double)(v * 100.0f), held ? "held" : "released", (unsigned)pressure);
+            ImGui::ProgressBar(v, ImVec2(-FLT_MIN, 0.0f), overlay);
         }
     }
 }

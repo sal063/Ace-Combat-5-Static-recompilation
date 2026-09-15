@@ -183,16 +183,9 @@ void ps2_settings_defaults(ps2_settings *s) {
     s->ui_scale = 1.0f;
     s->block_input_in_menu = 1;
     ps2_settings_default_bindings(s, 1, 1);
-    for (int i = 0; i < 2; i++) {
-        s->stick[i].shape = PS2_DZ_AXIAL;
-        s->stick[i].outer = 0.0f;
-        s->stick[i].curve = 1.0f;
-    }
-    s->stick[0].inner = 7849.0f / 32767.0f;
-    s->stick[1].inner = 8689.0f / 32767.0f;
-    s->trigger_deadzone = 3200.0f / 32767.0f;
-    s->trigger_press = 8000.0f / 32767.0f;
-    s->axis_press = 0.5f;
+    s->deadzone = 0.0f;
+    s->axis_scale = 1.33f;
+    s->button_deadzone = 0.0f;
 }
 
 static float clampf(float v, float lo, float hi) {
@@ -237,17 +230,11 @@ static void sanitize(ps2_settings *s) {
             if (s->key[a][k] < 0 || s->key[a][k] >= SDL_SCANCODE_COUNT) s->key[a][k] = 0;
             if (s->pad[a][k] < 0 || s->pad[a][k] > 0x1FF) s->pad[a][k] = 0;
         }
-    for (int i = 0; i < 2; i++) {
-        s->stick[i].shape = clampi(s->stick[i].shape, 0, 2);
-        s->stick[i].inner = clampf(s->stick[i].inner, 0.0f, 0.9f);
-        s->stick[i].outer = clampf(s->stick[i].outer, 0.0f, 0.5f);
-        s->stick[i].curve = clampf(s->stick[i].curve, 0.2f, 4.0f);
-        s->stick[i].invert_x = s->stick[i].invert_x != 0;
-        s->stick[i].invert_y = s->stick[i].invert_y != 0;
-    }
-    s->trigger_deadzone = clampf(s->trigger_deadzone, 0.0f, 0.5f);
-    s->trigger_press = clampf(s->trigger_press, 0.02f, 1.0f);
-    s->axis_press = clampf(s->axis_press, 0.1f, 0.95f);
+    s->deadzone = clampf(s->deadzone, 0.0f, 1.0f);
+    s->axis_scale = clampf(s->axis_scale, 0.01f, 2.0f);
+    s->button_deadzone = clampf(s->button_deadzone, 0.0f, 1.0f);
+    s->invert[0] = clampi(s->invert[0], 0, 3);
+    s->invert[1] = clampi(s->invert[1], 0, 3);
 }
 
 typedef struct {
@@ -289,21 +276,11 @@ static const cfg_field fields[] = {
     FI("display", "show_fps", show_fps, "1 on"),
     FF("display", "menu_scale", ui_scale, "0.5..3"),
     FI("input", "block_game_input_in_menu", block_input_in_menu, "1 on"),
-    FI("analog", "left_shape", stick[0].shape, "0 axial, 1 radial, 2 scaled radial"),
-    FF("analog", "left_deadzone", stick[0].inner, "fraction of travel"),
-    FF("analog", "left_outer_deadzone", stick[0].outer, ""),
-    FF("analog", "left_curve", stick[0].curve, "1 linear"),
-    FI("analog", "left_invert_x", stick[0].invert_x, ""),
-    FI("analog", "left_invert_y", stick[0].invert_y, ""),
-    FI("analog", "right_shape", stick[1].shape, "0 axial, 1 radial, 2 scaled radial"),
-    FF("analog", "right_deadzone", stick[1].inner, "fraction of travel"),
-    FF("analog", "right_outer_deadzone", stick[1].outer, ""),
-    FF("analog", "right_curve", stick[1].curve, "1 linear"),
-    FI("analog", "right_invert_x", stick[1].invert_x, ""),
-    FI("analog", "right_invert_y", stick[1].invert_y, ""),
-    FF("analog", "trigger_deadzone", trigger_deadzone, "resting noise ignored, fraction of travel"),
-    FF("analog", "trigger_press", trigger_press, "travel at which L2/R2 count as held"),
-    FF("analog", "stick_as_button", axis_press, "stick travel that presses a bound button"),
+    FF("analog", "deadzone", deadzone, "PCSX2 Analog Deadzone, both sticks, 0..1"),
+    FF("analog", "axis_scale", axis_scale, "PCSX2 Analog Sensitivity, 0.01..2 (default 1.33)"),
+    FF("analog", "button_deadzone", button_deadzone, "PCSX2 Button/Trigger Deadzone, 0..1"),
+    FI("analog", "invert_left", invert[0], "0 none, 1 left/right, 2 up/down, 3 both"),
+    FI("analog", "invert_right", invert[1], "0 none, 1 left/right, 2 up/down, 3 both"),
 };
 
 void ps2_settings_disable_file(void) {
@@ -377,6 +354,17 @@ void ps2_settings_load(void) {
             if (section[0] == 'k') { ps2_cfg.key[act][0] = a; ps2_cfg.key[act][1] = b; }
             else                   { ps2_cfg.pad[act][0] = a; ps2_cfg.pad[act][1] = b; }
             continue;
+        }
+        if (!strcmp(section, "analog")) {
+            static const char *const old_invert[4] = {
+                "left_invert_x", "left_invert_y", "right_invert_x", "right_invert_y",
+            };
+            int i = 0;
+            while (i < 4 && strcmp(key, old_invert[i])) i++;
+            if (i < 4) {
+                if (atoi(val)) ps2_cfg.invert[i / 2] |= 1 << (i % 2);
+                continue;
+            }
         }
         for (size_t i = 0; i < sizeof fields / sizeof fields[0]; i++) {
             if (strcmp(fields[i].section, section) || strcmp(fields[i].key, key)) continue;
@@ -463,47 +451,44 @@ void ps2_settings_apply_game_patches(void) {
     }
 }
 
-static float response(float m, const ps2_stick_cfg *c) {
-    float span = 1.0f - c->inner - c->outer;
-    if (span < 0.01f) span = 0.01f;
-    m = (m - c->inner) / span;
-    if (m <= 0.0f) return 0.0f;
-    if (m > 1.0f) m = 1.0f;
-    if (c->curve != 1.0f) m = powf(m, c->curve);
-    return m;
+float ps2_pad_axis_value(int raw, int positive) {
+    float v = (float)raw / (raw < 0 ? 32768.0f : 32767.0f);
+    return clampf(positive ? v : -v, 0.0f, 1.0f);
 }
 
-void ps2_stick_process(const ps2_stick_cfg *c, float x, float y,
-                       float *ox, float *oy) {
-    float rx, ry;
-    x = clampf(x, -1.0f, 1.0f);
-    y = clampf(y, -1.0f, 1.0f);
-    if (c->shape == PS2_DZ_AXIAL) {
-        rx = x < 0.0f ? -response(-x, c) : response(x, c);
-        ry = y < 0.0f ? -response(-y, c) : response(y, c);
-    } else {
-        float m = sqrtf(x * x + y * y);
-        if (m <= c->inner || m < 1e-6f) {
-            rx = ry = 0.0f;
-        } else if (c->shape == PS2_DZ_RADIAL) {
-            float lim = 1.0f - c->outer, s = 1.0f;
-            if (m > lim) s = 1.0f / m;
-            else if (lim < 1.0f) s = 1.0f / lim;
-            if (c->curve != 1.0f) {
-                float mm = m * s;
-                if (mm > 1.0f) mm = 1.0f;
-                s *= powf(mm, c->curve) / (mm > 1e-6f ? mm : 1.0f);
-            }
-            rx = x * s;
-            ry = y * s;
-        } else {
-            float r = response(m, c) / m;
-            rx = x * r;
-            ry = y * r;
+void ps2_pad_stick(float deadzone, float axis_scale, int invert, const float v[4],
+                   unsigned char *x, unsigned char *y) {
+    unsigned raw[4], px, nx, py, ny;
+    for (int i = 0; i < 4; i++)
+        raw[i] = (unsigned char)clampf(v[i] * axis_scale * 255.0f, 0.0f, 255.0f);
+    px = raw[invert & 1 ? 2 : 3];
+    nx = raw[invert & 1 ? 3 : 2];
+    py = raw[invert & 2 ? 0 : 1];
+    ny = raw[invert & 2 ? 1 : 0];
+#define MERGE(pos, neg) ((pos) != 0 ? 127u + ((pos) + 1u) / 2u : 127u - (neg) / 2u)
+    *x = (unsigned char)MERGE(px, nx);
+    *y = (unsigned char)MERGE(py, ny);
+#undef MERGE
+    if (deadzone > 0.0f) {
+        float fx = px != 0 ? (float)px / 255.0f : (float)nx / -255.0f;
+        float fy = py != 0 ? (float)py / 255.0f : (float)ny / -255.0f;
+        if (fx != 0.0f || fy != 0.0f) {
+            float theta = atan2f(fy, fx);
+            float dzx = cosf(theta) * deadzone, dzy = sinf(theta) * deadzone;
+            int in_x = fx < 0.0f ? fx > dzx : fx <= dzx;
+            int in_y = fy < 0.0f ? fy > dzy : fy <= dzy;
+            if (in_x && in_y) *x = *y = 127;
         }
     }
-    if (c->invert_x) rx = -rx;
-    if (c->invert_y) ry = -ry;
-    *ox = clampf(rx, -1.0f, 1.0f);
-    *oy = clampf(ry, -1.0f, 1.0f);
+}
+
+int ps2_pad_trigger(float button_deadzone, float value, unsigned char *pressure) {
+    float s = clampf(value, 0.0f, 1.0f);
+    float d = button_deadzone > 0.0f && s < button_deadzone ? 0.0f : s;
+    *pressure = (unsigned char)(d * 255.0f);
+    return d > 0.0f;
+}
+
+int ps2_pad_button(float button_deadzone, float value) {
+    return (value < button_deadzone ? 0.0f : value) > 0.0f;
 }

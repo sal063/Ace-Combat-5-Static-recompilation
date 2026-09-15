@@ -2629,14 +2629,11 @@ static int pad_deadzone_env(void) {
 typedef struct { int rest; int have_rest; } pad_trigger;
 static pad_trigger trig_l, trig_r;
 
-static int trigger_pressure(pad_trigger *t, int v) {
-    int d;
+static int trigger_raw(pad_trigger *t, int v) {
+    if (!PS2_ENV("PS2_PAD_TRIGGER_REST")) return v;
     if (!t->have_rest) { t->rest = v; t->have_rest = 1; }
-    d = v - t->rest;
-    if (d < 0) d = -d;
-    if (d < (int)(ps2_cfg.trigger_deadzone * 32767.0f + 0.5f)) return 0;
-    if (d > 32767) d = 32767;
-    return d;
+    v -= t->rest;
+    return v < 0 ? -v : v;
 }
 
 static int padbind_is_trigger(int code) {
@@ -2646,32 +2643,18 @@ static int padbind_is_trigger(int code) {
             || axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
 }
 
-static int padbind_value(int code) {
-    if (!gamepad || code <= 0) return 0;
+static float padbind_value(int code) {
+    if (!gamepad || code <= 0) return 0.0f;
     if (code & PS2_PADBIND_AXIS) {
         int axis = (code & 0xFF) >> 1, v;
-        if (axis >= SDL_GAMEPAD_AXIS_COUNT) return 0;
+        if (axis >= SDL_GAMEPAD_AXIS_COUNT) return 0.0f;
         v = SDL_GetGamepadAxis(gamepad, (SDL_GamepadAxis)axis);
         if (padbind_is_trigger(code))
-            return trigger_pressure(axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER
-                                    ? &trig_l : &trig_r, v);
-        if (!(code & 1)) v = -v;
-        return v < 0 ? 0 : v > 32767 ? 32767 : v;
+            v = trigger_raw(axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER ? &trig_l : &trig_r, v);
+        return ps2_pad_axis_value(v, code & 1);
     }
-    if (code - 1 >= SDL_GAMEPAD_BUTTON_COUNT) return 0;
-    return SDL_GetGamepadButton(gamepad, (SDL_GamepadButton)(code - 1)) ? 32767 : 0;
-}
-
-static int padbind_pressed(int code, int mag) {
-    if (!(code & PS2_PADBIND_AXIS)) return mag > 0;
-    if (padbind_is_trigger(code)) return mag > (int)(ps2_cfg.trigger_press * 32767.0f + 0.5f);
-    return mag > (int)(ps2_cfg.axis_press * 32767.0f + 0.5f);
-}
-
-static u8 stick_to_pad(float v) {
-    int m = v <= -1.0f ? -32768 : (int)(v * 32767.0f);
-    m = (m + 32768) >> 8;
-    return (u8)(m < 0 ? 0 : m > 255 ? 255 : m);
+    if (code - 1 >= SDL_GAMEPAD_BUTTON_COUNT) return 0.0f;
+    return SDL_GetGamepadButton(gamepad, (SDL_GamepadButton)(code - 1)) ? 1.0f : 0.0f;
 }
 
 SDL_Gamepad *ps2_video_gamepad(void) { return gamepad; }
@@ -2691,55 +2674,44 @@ static void poll_input(void) {
     const bool *keys = window_hidden ? NULL : SDL_GetKeyboardState(NULL);
     ps2_pad_state st;
     u16 kbmask = 0;
-    float push[2][4] = {{0.0f}};
-    int held[2][4] = {{0}};
-    int l2p = 0, r2p = 0;
+    float value[PS2_ACT_COUNT];
+    float dz = ps2_cfg.deadzone;
+    int env = pad_deadzone_env();
     memset(&st, 0, sizeof(st));
     st.connected = 1;
-    st.lx = st.ly = st.rx = st.ry = 128;
+    st.lx = st.ly = st.rx = st.ry = PS2_PAD_ANALOG_NEUTRAL;
     if (ps2_ui_blocks_game_input()) { ps2_pad_publish(0, &st); return; }
 
     for (int act = 0; act < PS2_ACT_COUNT; act++) {
-        int key = 0, pressed = 0, mag = 0, pressure = 0;
+        float v = 0.0f;
         for (int k = 0; k < PS2_BIND_SLOTS; k++) {
             int sc = ps2_cfg.key[act][k], code = ps2_cfg.pad[act][k];
-            if (keys && sc > 0 && sc < SDL_SCANCODE_COUNT && keys[sc]) key = 1;
+            if (keys && sc > 0 && sc < SDL_SCANCODE_COUNT && keys[sc]) {
+                v = 1.0f;
+                if (act < PS2_ACT_BUTTONS) kbmask |= (u16)(1u << act);
+            }
             if (gamepad && code > 0) {
-                int v = padbind_value(code);
-                if (v > mag) mag = v;
-                if (padbind_pressed(code, v)) pressed = 1;
-                if (padbind_is_trigger(code) && v * 255 / 32767 > pressure)
-                    pressure = v * 255 / 32767;
+                float p = padbind_value(code);
+                if (p > v) v = p;
             }
         }
-        if (act < PS2_ACT_BUTTONS) {
-            if (key) kbmask |= (u16)(1u << act);
-            if (key || pressed) st.buttons |= (u16)(1u << act);
-            if (act == PS2_ACT_L2) l2p = pressure;
-            if (act == PS2_ACT_R2) r2p = pressure;
-        } else {
-            int s = (act - PS2_ACT_LS_UP) / 4, dir = (act - PS2_ACT_LS_UP) % 4;
-            push[s][dir] = (float)mag / 32767.0f;
-            held[s][dir] = key;
-        }
+        value[act] = v;
     }
-    st.l2 = (u8)l2p;
-    st.r2 = (u8)r2p;
-    if (st.buttons & (1u << PS2_ACT_L2)) st.l2 = 255;
-    if (st.buttons & (1u << PS2_ACT_R2)) st.r2 = 255;
-
-    for (int s = 0; s < 2; s++) {
-        ps2_stick_cfg c = ps2_cfg.stick[s];
-        float x = push[s][3] - push[s][2], y = push[s][1] - push[s][0];
-        float ox, oy;
-        int env = pad_deadzone_env();
-        if (env >= 0) c.inner = (float)env / 32767.0f;
-        ps2_stick_process(&c, x, y, &ox, &oy);
-        if (held[s][2] != held[s][3]) ox = held[s][2] ? -1.0f : 1.0f;
-        if (held[s][0] != held[s][1]) oy = held[s][0] ? -1.0f : 1.0f;
-        if (s == 0) { st.lx = stick_to_pad(ox); st.ly = stick_to_pad(oy); }
-        else        { st.rx = stick_to_pad(ox); st.ry = stick_to_pad(oy); }
+    for (int act = 0; act < PS2_ACT_BUTTONS; act++) {
+        int held;
+        if (act == PS2_ACT_L2)
+            held = ps2_pad_trigger(ps2_cfg.button_deadzone, value[act], &st.l2);
+        else if (act == PS2_ACT_R2)
+            held = ps2_pad_trigger(ps2_cfg.button_deadzone, value[act], &st.r2);
+        else
+            held = ps2_pad_button(ps2_cfg.button_deadzone, value[act]);
+        if (held) st.buttons |= (u16)(1u << act);
     }
+    if (env >= 0) dz = (float)env / 32767.0f;
+    ps2_pad_stick(dz, ps2_cfg.axis_scale, ps2_cfg.invert[0], value + PS2_ACT_LS_UP,
+                  &st.lx, &st.ly);
+    ps2_pad_stick(dz, ps2_cfg.axis_scale, ps2_cfg.invert[1], value + PS2_ACT_RS_UP,
+                  &st.rx, &st.ry);
 
     if (PS2_ENV("PS2_TRACE_PAD")) {
         static u16 last_src = 0xFFFF;

@@ -55,6 +55,7 @@ void ps2_cdvd_report(void);
 int  ps2_cdvd_sync_pending(void);
 
 #define PS2_PAD_PORTS 2
+#define PS2_PAD_ANALOG_NEUTRAL 0x7F
 typedef struct ps2_pad_state {
     int connected;
     u16 buttons;

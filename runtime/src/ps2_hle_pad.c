@@ -181,8 +181,8 @@ void ps2_pad_init(void) {
     memset(ps2_pad_host, 0, sizeof(ps2_pad_host));
     memset(pad_seen, 0, sizeof(pad_seen));
     for (int i = 0; i < PS2_PAD_PORTS; i++) {
-        ps2_pad_host[i].lx = ps2_pad_host[i].ly = 128;
-        ps2_pad_host[i].rx = ps2_pad_host[i].ry = 128;
+        ps2_pad_host[i].lx = ps2_pad_host[i].ly = PS2_PAD_ANALOG_NEUTRAL;
+        ps2_pad_host[i].rx = ps2_pad_host[i].ry = PS2_PAD_ANALOG_NEUTRAL;
     }
     ps2_pad_host[0].connected = 1;
     memcpy(pad_poll, ps2_pad_host, sizeof(pad_poll));
@@ -359,8 +359,8 @@ void hle_scePad2Read(ps2_ctx *ctx) {
     d[13] = (buttons >> PAD_SQUARE)   & 1 ? 255 : 0;
     d[14] = (buttons >> PAD_L1)       & 1 ? 255 : 0;
     d[15] = (buttons >> PAD_R1)       & 1 ? 255 : 0;
-    d[16] = (buttons >> PAD_L2) & 1 ? 255 : st->l2;
-    d[17] = (buttons >> PAD_R2) & 1 ? 255 : st->r2;
+    d[16] = (buttons >> PAD_L2) & 1 ? ((st->buttons >> PAD_L2) & 1 ? st->l2 : 255) : 0;
+    d[17] = (buttons >> PAD_R2) & 1 ? ((st->buttons >> PAD_R2) & 1 ? st->r2 : 255) : 0;
     if (buf) ps2_put_mem(buf, d, sizeof(d));
     if (buf && PS2_ENV("PS2_TRACE_PAD")) {
         u32 obj = buf - 628u;
