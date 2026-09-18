@@ -114,6 +114,7 @@ void main() {
     bool tcc  = ((f >> 17) & 1u) != 0u;
     bool afkeep = ((f >> 18) & 1u) != 0u;
     bool point = ((f >> 19) & 1u) != 0u;
+    bool point_rows = point && ((f >> 29) & 1u) != 0u;
     bool afonly = ((f >> 20) & 1u) != 0u;
     bool fba   = ((f >> 21) & 1u) != 0u;
     bool date  = ((f >> 22) & 1u) != 0u;
@@ -137,12 +138,13 @@ void main() {
             sub = gl_FragCoord.xy - 0.5 - nat * pc.scale;
             pix = ivec2(nat);
             if (point && (sprite || rt_up))
-                tc += tdx * ((nat.x + 0.5) * pc.scale - gl_FragCoord.x)
+                tc += (point_rows ? vec2(0.0) : tdx * ((nat.x + 0.5) * pc.scale - gl_FragCoord.x))
                     + tdy * ((nat.y + 0.5) * pc.scale - gl_FragCoord.y);
         }
         if (point && ruv != 0u) {
-            tc.x = sprite_round(tc.x, ruv & 3u,
-                int((ruv >> 4) & 4095u) - 2048, pix.x);
+            if (!point_rows)
+                tc.x = sprite_round(tc.x, ruv & 3u,
+                    int((ruv >> 4) & 4095u) - 2048, pix.x);
             tc.y = sprite_round(tc.y, (ruv >> 2) & 3u,
                 int((ruv >> 16) & 4095u) - 2048, pix.y);
         }

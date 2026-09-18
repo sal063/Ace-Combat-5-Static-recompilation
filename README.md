@@ -4,6 +4,8 @@ A static recompilation of **Ace Combat 5: The Unsung War** (PS2, NTSC-U) for Win
 
 The game's main CPU code isn't emulated. A Python tool reads the original executable and translates every function into C ahead of time. GCC then compiles that together with a runtime that stands in for the rest of the console: the GS (drawn through Vulkan), the VU vector units, SPU2 audio, the IPU for the movies, the IOP modules, memory cards and controllers. What you get at the end is a normal `ac5.exe`.
 
+The graphics are native too. The 3D (the aircraft, the cockpit, terrain, ground objects, the sky and clouds) doesn't go through an emulated Graphics Synthesizer. The vector programs the game runs on the VU1 to transform and light its models have been rewritten as native code, and the geometry is drawn as real GPU meshes, with vertex shaders, mipmapped textures and anisotropic filtering. The flight HUD, the radar and the radio captions are drawn at your window's resolution, so they stay sharp at any size. Whatever the native renderer doesn't cover yet (the menus, the hangar, some effects) still goes through the emulated GS, into the same frame.
+
 The game is fully playable.
 
 There's no game code or assets in this repo. You bring your own copy of the game and the recompiler builds the C code from it on your machine, which is also why `generated/` is in `.gitignore`.
@@ -128,6 +130,7 @@ Where your stuff goes:
 
 - Saves are written to a `saves` folder inside whatever folder you started the game from. The memory card files get created the first time the game touches them. Set `PS2_SAVE_DIR` if you want them somewhere else. These are this runtime's own format, not PCSX2 memory cards, so you can't bring saves over from an emulator.
 - Settings are saved to `ac5_settings.ini` next to `ac5.exe`.
+- Compiled graphics pipelines are cached in `ac5_pipelines.cache` and `ac5_pipelines.keys` next to `ac5.exe`, so a state that was compiled once doesn't cause a stutter the next time it shows up. Deleting them is harmless, they just get rebuilt.
 
 ### Controls
 
@@ -153,9 +156,29 @@ Other keys:
 - **Esc** quits, or closes the settings menu if it's open
 - **F6 to F10** are debugging hotkeys (captures and state dumps), you can ignore them
 
+## Mods
+
+Mods go in a `mods` folder in whatever folder you start the game from, one folder per mod. Nothing gets repacked or rebuilt. The game reads its files through a layered file system, and a mod is just another layer on top of the disc. That works the same with the ISO and with extracted disc files.
+
+A mod can:
+
+- replace files, including files inside `DATA.PAC`, by dropping them in its `files/` folder under the name the game uses for them
+- change the game's named tuning values with a `params.txt`
+- apply PCSX2 `.pnach` patches that change data (code patches can't work on recompiled code, and get refused with a message)
+- run Lua scripts that hook the game's functions, read and write its memory, react to frames and scene changes, and rewrite the controller input
+- run native code from a DLL, but only if its `mod.toml` says `native = true`
+
+`mods/README.md` explains all of it. The Lua API is `runtime/include/ac5mod.h`, and that header stays documented on purpose.
+
+To name files inside `DATA.PAC` you need `config/pac_names.txt`, which is already in the repo. If you want to rebuild it, `python -m modkit.export_names` generates it from `datapack.bin` in the PS4 release. `python -m modkit extract` pulls files out of the archive under the same names, so you have something to start from. Both need `PYTHONPATH` pointing at `tools`.
+
+If the game misbehaves, set `PS2_NO_MODS=1` first. That turns the whole mod layer off, and if the problem is still there, it isn't a mod. `PS2_MOD_DIR` loads mods from a different folder. The log ends with a summary of every mod, conflict, hook and patch.
+
+`tests/mods` has the mods I test the mod layer with. `python tools/make_test_mods.py` adds the ones that need files from your own disc, because those can't be in the repo.
+
 ## Optional: recompile the VU1 microprograms as well
 
-The PS2's VU1 runs small vector programs that the game uploads to it while it's running. They aren't in the executable as code, so `ps2recomp` never sees them, and by default the runtime interprets them. You can record the ones the game really uses and compile those to C too, which is faster.
+The PS2's VU1 runs small vector programs that the game uploads to it while it's running. They aren't in the executable as code, so `ps2recomp` never sees them. The ones the native renderer has replaced never run at all, and by default the runtime interprets the rest. You can record the ones the game really uses and compile those to C too, which is faster for whatever the native renderer doesn't cover yet.
 
 1. Record them. Set the census variable and play like normal:
 
@@ -196,10 +219,15 @@ You don't need to. Everything in `config/` is already generated and committed, s
 - `tools/ps2recomp/`: the recompiler (ELF in, C out)
 - `tools/vurecomp/`: the VU1 microprogram recompiler
 - `tools/`: test and check scripts
-- `runtime/`: everything that stands in for the console, plus the settings menu
+- `runtime/`: everything that stands in for the console, plus the settings menu and the mod layer
+- `runtime/src/rn/`: the native renderer
 - `runtime/shaders/`: the GLSL shaders, compiled at build time
 - `config/`: the IDA export, symbol tables, overrides and hooks
 - `third_party/imgui/`: Dear ImGui, used for the settings menu
+- `third_party/lua/`: Lua 5.4.9, used for mod scripts
+- `tools/modkit/`: reads `DATA.PAC` by file name
+- `mods/`: where mods go, see `mods/README.md`
+- `tests/mods/`: the mods the mod layer is tested with
 - `generated/`: the recompiler's output, which you create in step 3
 
 ## Troubleshooting
@@ -215,4 +243,4 @@ You don't need to. Everything in `config/` is already generated and committed, s
 
 Ace Combat is a trademark of Bandai Namco Entertainment. This project isn't affiliated with or endorsed by them in any way. No game files are included, and I won't share any, so please don't ask.
 
-The code in this repo is released under the Apache License 2.0, see `LICENSE`. Dear ImGui is MIT licensed and keeps its own license in `third_party/imgui/LICENSE.txt`.
+The code in this repo is released under the Apache License 2.0, see `LICENSE`. Dear ImGui is MIT licensed and keeps its own license in `third_party/imgui/LICENSE.txt`. Lua is MIT licensed too, see `third_party/lua/LICENSE.html`.

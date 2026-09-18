@@ -821,7 +821,7 @@ class Emitter:
             self.overrides_used[fn.entry] = ov
             out.append("/* %08X  %s  -- HLE override -> %s() */"
                        % (fn.entry, nm or "", ov))
-            out.append("void %s(ps2_ctx *ctx) {" % fname(fn.entry))
+            out.append("PS2_NOIPA void %s(ps2_ctx *ctx) {" % fname(fn.entry))
             out.append("    PS2_ENTER(0x%08Xu);" % fn.entry)
             out.append("    %s(ctx);" % ov)
             out.append("}")
@@ -851,7 +851,7 @@ class Emitter:
         hdr = "/* %08X  %s  (%d insns" % (fn.entry, nm or "", len(fn.addrs))
         hdr += ") */"
         out.append(hdr)
-        out.append("void %s(ps2_ctx *ctx) {" % fname(fn.entry))
+        out.append("PS2_NOIPA void %s(ps2_ctx *ctx) {" % fname(fn.entry))
         out.append("    PS2_ENTER(0x%08Xu);" % fn.entry)
         hk = self.hooks.get(fn.entry)
         if hk:
@@ -925,10 +925,10 @@ class Emitter:
             for e in entries:
                 nm = self.sym(e)
                 if nm:
-                    fp.write("void %s(ps2_ctx *ctx);  /* %s */\n"
+                    fp.write("PS2_NOIPA void %s(ps2_ctx *ctx);  /* %s */\n"
                              % (fname(e), nm))
                 else:
-                    fp.write("void %s(ps2_ctx *ctx);\n" % fname(e))
+                    fp.write("PS2_NOIPA void %s(ps2_ctx *ctx);\n" % fname(e))
             fp.write("#ifdef __cplusplus\n}\n#endif\n")
             fp.write("#endif\n")
 

@@ -1,4 +1,5 @@
 #include "ps2_gfxq.h"
+#include "rn.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,7 +28,9 @@ enum {
     GQ_VIFCLR,
     GQ_GS_PRIV,
     GQ_MMIO,
-    GQ_FIELD
+    GQ_FIELD,
+    GQ_TAG,
+    GQ_INTENT
 };
 
 static u8 *q_buf;
@@ -112,7 +115,6 @@ void ps2_speed_sample(u64 fields, u64 dropped) {
     prev_work=work;
 }
 
-
 static size_t q_producer_tail, q_reserved_end;
 static u8 *q_reserve(u32 n) {
     size_t off = q_head & (q_cap - 1);
@@ -139,14 +141,17 @@ static u8 *q_reserve(u32 n) {
 }
 
 static void q_commit(u32 n) {
-    pthread_mutex_lock(&q_lock);
-    q_head = q_reserved_end;
+    size_t fill;
+    __atomic_store_n(&q_head, q_reserved_end, __ATOMIC_SEQ_CST);
     st_records++;
     st_bytes += n;
-    size_t fill = q_head - q_tail;
+    fill = q_reserved_end - __atomic_load_n(&q_tail, __ATOMIC_RELAXED);
     if (fill > st_peak_fill) st_peak_fill = fill;
-    if (!q_busy) pthread_cond_signal(&q_not_empty);
-    pthread_mutex_unlock(&q_lock);
+    if (!__atomic_load_n(&q_busy, __ATOMIC_SEQ_CST)) {
+        pthread_mutex_lock(&q_lock);
+        pthread_cond_signal(&q_not_empty);
+        pthread_mutex_unlock(&q_lock);
+    }
 }
 
 static inline void put8(u8 *p, u32 off, u8 v)   { p[off] = v; }
@@ -174,6 +179,12 @@ static u32 q_apply(const u8 *r) {
     case GQ_VIFCLR:  ps2_vif_clear_stall((int)r[1]);               return 2u;
     case GQ_GS_PRIV: ps2_gs_priv_write_now(get32(r, 1), get64(r, 5)); return 13u;
     case GQ_MMIO:    ps2_gif_ctrl_write(get32(r, 1), get32(r, 5)); return 9u;
+    case GQ_TAG:     rn_gs_tag(get32(r, 1), get32(r, 5), get32(r, 9)); return 13u;
+    case GQ_INTENT: {
+        u32 len = get32(r, 1);
+        rn_gs_intent(r + 5, len);
+        return 5u + len;
+    }
     case GQ_FIELD:
         if (!ps2_gs_present_now()) ps2_request_exit();
         return 1u;
@@ -186,20 +197,22 @@ static u32 q_apply(const u8 *r) {
 static void *q_main(void *unused) {
     (void)unused;
     q_is_worker = 1;
+    ps2_host_prof_attach("gfx");
     u64 speed_burst=0;
     int speed_on=ps2_speed_enabled();
     pthread_mutex_lock(&q_lock);
     for (;;) {
-        while (q_running && q_head == q_tail) {
+        while (q_running && __atomic_load_n(&q_head, __ATOMIC_SEQ_CST) == q_tail) {
             if (speed_burst) { speed_work_ns += gq_now_ns()-speed_burst; speed_burst=0; }
-            q_busy = 0;
+            __atomic_store_n(&q_busy, 0, __ATOMIC_SEQ_CST);
             pthread_cond_broadcast(&q_idle);
+            if (__atomic_load_n(&q_head, __ATOMIC_SEQ_CST) != q_tail) break;
             pthread_cond_wait(&q_not_empty, &q_lock);
         }
-        if (!q_running && q_head == q_tail) break;
-        q_busy = 1;
+        if (!q_running && __atomic_load_n(&q_head, __ATOMIC_SEQ_CST) == q_tail) break;
+        __atomic_store_n(&q_busy, 1, __ATOMIC_SEQ_CST);
         if (!speed_burst && speed_on) speed_burst=gq_now_ns();
-        size_t tail = q_tail, head = q_head;
+        size_t tail = q_tail, head = __atomic_load_n(&q_head, __ATOMIC_ACQUIRE);
         unsigned records = 0;
         int field = 0, corrupt = 0;
         u64 speed_elapsed = 0;
@@ -223,7 +236,7 @@ static void *q_main(void *unused) {
             if (field) break;
         }
         pthread_mutex_lock(&q_lock);
-        q_tail = tail;
+        __atomic_store_n(&q_tail, tail, __ATOMIC_RELEASE);
         if (field && !corrupt) {
             if (speed_on) {
                 speed_present_ns += speed_elapsed; speed_present_n++;
@@ -235,7 +248,7 @@ static void *q_main(void *unused) {
         pthread_cond_broadcast(&q_not_full);
         if (corrupt) { q_running = 0; break; }
     }
-    q_busy = 0;
+    __atomic_store_n(&q_busy, 0, __ATOMIC_SEQ_CST);
     pthread_cond_broadcast(&q_idle);
     pthread_mutex_unlock(&q_lock);
     return NULL;
@@ -423,4 +436,19 @@ void ps2_gfxq_mmio(u32 addr, u32 val) {
     { u8 *r = q_reserve(9);
       put8(r, 0, GQ_MMIO); put32(r, 1, addr); put32(r, 5, val);
       q_commit(9); }
+}
+
+void ps2_gfxq_tag(u32 kind, u32 a, u32 b) {
+    if (!ps2_gfxq_on) { rn_gs_tag(kind, a, b); return; }
+    { u8 *r = q_reserve(13);
+      put8(r, 0, GQ_TAG); put32(r, 1, kind); put32(r, 5, a); put32(r, 9, b);
+      q_commit(13); }
+}
+
+void ps2_gfxq_intent(const u8 *rec, u32 len) {
+    if (!ps2_gfxq_on) { rn_gs_intent(rec, len); return; }
+    { u8 *r = q_reserve(5u + len);
+      put8(r, 0, GQ_INTENT); put32(r, 1, len);
+      memcpy(r + 5, rec, len);
+      q_commit(5u + len); }
 }

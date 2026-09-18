@@ -133,10 +133,10 @@ typedef struct {
 } preset_def;
 
 static const preset_def presets[4] = {
-    { 1, PS2_TEXFILTER_GAME,  0, 1, 0, PS2_SCALE_BILINEAR, 0.00f },
-    { 2, PS2_TEXFILTER_GAME,  4, 1, 0, PS2_SCALE_BILINEAR, 0.00f },
-    { 3, PS2_TEXFILTER_GAME,  8, 1, 0, PS2_SCALE_SHARP,    0.20f },
-    { 4, PS2_TEXFILTER_GAME, 16, 1, 0, PS2_SCALE_SHARP,    0.20f },
+     { 1, PS2_TEXFILTER_GAME,  0, 1, 0, PS2_SCALE_BILINEAR, 0.00f },
+     { 2, PS2_TEXFILTER_GAME,  4, 1, 0, PS2_SCALE_BILINEAR, 0.00f },
+     { 3, PS2_TEXFILTER_GAME,  8, 1, 0, PS2_SCALE_SHARP,    0.20f },
+     { 4, PS2_TEXFILTER_GAME, 16, 1, 0, PS2_SCALE_SHARP,    0.20f },
 };
 
 void ps2_settings_apply_preset(ps2_settings *s, int preset) {
@@ -179,6 +179,7 @@ void ps2_settings_defaults(ps2_settings *s) {
     s->window_h = 896;
     s->aspect = PS2_ASPECT_STRETCH;
     s->aspect_custom = 16.0f / 9.0f;
+    s->hud_layout = PS2_HUD_CENTERED;
     s->present_mode = PS2_PRESENT_MAILBOX;
     s->ui_scale = 1.0f;
     s->block_input_in_menu = 1;
@@ -220,6 +221,7 @@ static void sanitize(ps2_settings *s) {
     s->aspect_custom = clampf(s->aspect_custom, 0.5f, 4.0f);
     s->integer_scale = s->integer_scale != 0;
     s->widescreen = s->widescreen != 0;
+    s->hud_layout = clampi(s->hud_layout, 0, 1);
     s->present_mode = clampi(s->present_mode, 0, 3);
     s->fps_limit = clampi(s->fps_limit, 0, 1000);
     s->show_fps = s->show_fps != 0;
@@ -271,6 +273,7 @@ static const cfg_field fields[] = {
     FF("display", "aspect_custom", aspect_custom, "width / height"),
     FI("display", "integer_scale", integer_scale, "1 whole-number scaling only"),
     FI("display", "widescreen", widescreen, "1 apply the 16:9 game patch"),
+    FI("display", "hud_layout", hud_layout, "with widescreen: 0 stretch the HUD with the picture, 1 keep it 4:3 in the centre"),
     FI("display", "present_mode", present_mode, "0 mailbox, 1 vsync (fifo), 2 immediate, 3 adaptive vsync"),
     FI("display", "fps_limit", fps_limit, "0 off"),
     FI("display", "show_fps", show_fps, "1 on"),

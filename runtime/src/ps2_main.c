@@ -5,6 +5,11 @@
 #include "ps2_capture.h"
 #include "ps2_vk.h"
 #include "ps2_gfxq.h"
+#include "ps2_mod.h"
+#include "ps2_hook.h"
+#include "ps2_modapi.h"
+#include "ps2_vfs.h"
+#include "rn.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -186,6 +191,13 @@ void ps2_finish(const char *why) {
     ps2_gfxq_report();
     ps2_sif_hle_report();
     ps2_cdvd_report();
+    ps2_mod_report();
+    ps2_hook_report();
+    rn_tap_report();
+    rn_intent_report();
+    rn_fixes_report();
+    rn_report();
+    ps2_lua_report();
     ps2_nufile_report();
     ps2_nusound_report();
     ps2_nusndstr_report();
@@ -214,6 +226,7 @@ void ps2_finish(const char *why) {
     }
     ps2_phase_report(ps2_kernel_vblank_count());
     ps2_sampler_report(24);
+    ps2_host_prof_report();
     ps2_prof_report(30);
     ps2_dump_trace("run summary");
     if (video_active) {
@@ -269,6 +282,7 @@ void ps2_capture_report(const char *why) {
     ps2_vu_lower_hist_report();
     ps2_vif_hist_report();
     ps2_video_report();
+    rn_census_report("F9");
     ps2_unknown_report();
     ps2_dump_trace("capture");
     {
@@ -288,10 +302,9 @@ void ps2_capture_report(const char *why) {
     fflush(stderr);
 }
 
-
 static int nufile_selftest(const char *disc_file) {
     enum { REQ = 0x00300000u, BUF = 0x00310000u, REF = 4096 };
-    const ps2_disc_file *f = ps2_iso_find(disc_file);
+    const ps2_disc_file *f = ps2_vfs_find(disc_file);
     u8 *ref;
     u32 i, n, fd;
     int rc, fails = 0;
@@ -303,7 +316,7 @@ static int nufile_selftest(const char *disc_file) {
     n = f->size < REF ? f->size : REF;
     ref = (u8 *)malloc(n + 4096);
     if (!ref) return 1;
-    if (ps2_iso_read_host(f->lsn, (n + 256 + 2047) / 2048, ref) <= 0) {
+    if (ps2_vfs_read_sectors(f->lsn, (n + 256 + 2047) / 2048, ref) <= 0) {
         ps2_log("selftest: cannot read '%s' off the disc", disc_file);
         free(ref);
         return 1;
@@ -562,6 +575,7 @@ int main(int argc, char **argv) {
     }
     ps2_phase_init();
     ps2_sampler_start();
+    ps2_host_prof_attach("ee");
     ps2_wall_seconds();
     ps2_mem_init();
     ps2_statecap_init(ps2_ram, PS2_RAM_SIZE);
@@ -603,9 +617,20 @@ int main(int argc, char **argv) {
     }
     ps2_gfxq_init();
     ps2_build_dispatch();
+    if (getenv("PS2_HOOK_TEST")) {
+        extern void ps2_hook_selftest_attach(void);
+        ps2_hook_selftest_attach();
+    }
     if (load_image(dir) != 0) return 1;
-    if (disc && ps2_iso_open(disc) != 0)
+    ps2_mod_init();
+    if (disc && ps2_vfs_open(disc) != 0)
         ps2_log("warning: no disc at '%s'; CDVD requests will fail", disc);
+    ps2_mod_start();
+    rn_init();
+    rn_dump_init();
+    rn_vp_init();
+    rn_intent_init();
+    rn_fixes_init();
     if (want_selftest) {
         int bad;
         ps2_sif_hle_init();

@@ -30,6 +30,7 @@ enum { PS2_ASPECT_STRETCH, PS2_ASPECT_AUTO, PS2_ASPECT_4_3, PS2_ASPECT_16_9,
        PS2_ASPECT_CUSTOM };
 enum { PS2_PRESENT_MAILBOX, PS2_PRESENT_FIFO, PS2_PRESENT_IMMEDIATE,
        PS2_PRESENT_FIFO_RELAXED };
+enum { PS2_HUD_STRETCHED, PS2_HUD_CENTERED };
 #define PS2_INTERNAL_RES_MAX 8
 
 typedef struct ps2_settings {
@@ -54,6 +55,7 @@ typedef struct ps2_settings {
     float aspect_custom;
     int   integer_scale;
     int   widescreen;
+    int   hud_layout;
     int   present_mode;
     int   fps_limit;
     int   show_fps;

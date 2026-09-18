@@ -1,5 +1,6 @@
 #include "ps2_runtime.h"
 #include "ps2_hle.h"
+#include "ps2_modapi.h"
 #include <pthread.h>
 
 u64 ps2_kernel_vblank_count(void);
@@ -139,6 +140,7 @@ void ps2_pad_latch(void) {
             if (!(e && *e == '0')) ps2_finish("input recording ended");
         }
     }
+    ps2_modapi_input(ps2_pad_host, PS2_PAD_PORTS);
     if (pad_rec_fp)
         fwrite(ps2_pad_host, sizeof(ps2_pad_state), PS2_PAD_PORTS, pad_rec_fp);
     if (PS2_ENV("PS2_PAD_DIAG")) {

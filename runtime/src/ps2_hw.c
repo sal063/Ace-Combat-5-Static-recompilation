@@ -2,6 +2,7 @@
 #include "ps2_hle.h"
 #include "ps2_capture.h"
 #include "ps2_gfxq.h"
+#include "rn.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -461,7 +462,6 @@ u32 ps2_gif_transfer_eop(const ps2_reg128 *data, u32 max) {
     return max;
 }
 
-
 static u32 gif_dump_left, gif_dump_skip;
 static u64 gif_kick_empty, gif_kick_drawn;
 
@@ -668,6 +668,7 @@ static void dma_to_peripheral(int ch, u32 madr, u32 qwc) {
             qwc = room;
         }
     }
+    if (ch == 1 || ch == 2) rn_dma_transfer(ch, madr, qwc, 0);
     if (g_cap_deep) {
         if (ch == 0 || ch == 1) ps2_cap_vif_qw(ch, src, qwc);
         else if (ch == 2)       ps2_cap_gif_qw(src, qwc);
@@ -675,9 +676,11 @@ static void dma_to_peripheral(int ch, u32 madr, u32 qwc) {
     switch (ch) {
     case 0: case 1:
         ps2_gfxq_vif_qw(ch, src, qwc);
+        if (ch == 1) rn_dma_transfer(ch, madr, qwc, 1);
         break;
     case 2:
         ps2_gfxq_gif_qw(src, qwc);
+        rn_dma_transfer(ch, madr, qwc, 1);
         break;
     case 4:
         ps2_ipu_dma_in(src, qwc);
@@ -763,6 +766,8 @@ static void dma_run_chain(int ch) {
                 if (said == 1u) ps2_state_dump_numbered("badtag");
             }
         }
+        if ((ch == 1 || ch == 2) && (qwc || (tte && ch == 1)))
+            rn_dma_attrib(ch, dma[ch].tadr);
         if (tte && (ch == 0 || ch == 1)) {
             u64 hi = tagq->ud[1];
             if (g_cap_deep) {
@@ -830,6 +835,7 @@ static void dma_run_chain(int ch) {
         if (irq && tie) break;
         if (guard >= 0x40000) break;
     }
+    if (ch == 1 || ch == 2) rn_dma_attrib(ch, 0u);
 }
 
 #define IPU_OUT_LOG 64
@@ -1005,7 +1011,6 @@ void ps2_dmac_ipu_pull(void) {
     dma_ipu_advance();
     ipu_pull_left = 0u;
 }
-
 
 static void dma_start(int ch) {
     u32 chcr = dma[ch].chcr;

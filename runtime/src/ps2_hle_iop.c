@@ -1,5 +1,6 @@
 #include "ps2_runtime.h"
 #include "ps2_hle.h"
+#include "ps2_vfs.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -187,7 +188,7 @@ static int nufile_rpc_inner(ps2_ctx *ctx, u32 fno, u32 send, int ssize,
         if (len > sizeof(name) - 1) len = sizeof(name) - 1;
         for (u32 i = 0; i < len; i++) name[i] = (char)ps2_r8(send + 0x1C + i);
         name[len ? len - 1 : 0] = 0;
-        f = ps2_iso_find(name);
+        f = ps2_vfs_find(name);
         for (fd = 1; fd < NUFILE_MAX_FD; fd++)
             if (!nufile_fds[fd].used) break;
         if (!f || fd >= NUFILE_MAX_FD) {
@@ -219,7 +220,7 @@ static int nufile_rpc_inner(ps2_ctx *ctx, u32 fno, u32 send, int ssize,
             ps2_w32(recv, (u32)-1);
             return 0;
         }
-        got = ps2_iso_read_file(nufile_fds[fd].f, nufile_fds[fd].pos, len, buf);
+        got = ps2_vfs_read_guest(nufile_fds[fd].f, nufile_fds[fd].pos, len, buf);
         if (got < 0) got = 0;
         nufile_fds[fd].pos += (u64)got;
         nufile_bytes += (u64)got;
@@ -262,13 +263,13 @@ static int nufile_rpc_inner(ps2_ctx *ctx, u32 fno, u32 send, int ssize,
         if (len > sizeof(name)) len = sizeof(name);
         for (u32 i = 0; i < len; i++) name[i] = (char)ps2_r8(send + 0x14 + i);
         name[len ? len - 1 : 0] = 0;
-        f = ps2_iso_find(name);
+        f = ps2_vfs_find(name);
         if (!f) {
             ps2_log("nufile: load '%s' -> not found", name);
             ps2_w32(recv, (u32)-1);
             return 0;
         }
-        got = ps2_iso_read_file(f, 0, size ? size : f->size, buf);
+        got = ps2_vfs_read_guest(f, 0, size ? size : f->size, buf);
         if (got < 0) got = 0;
         nufile_bytes += (u64)got;
         ps2_log("nufile: load '%s' (%u of %u bytes) -> %08X", name,
@@ -502,7 +503,6 @@ void ps2_nusound_report(void) {
             (unsigned long long)nusound_calls,
             (unsigned long long)nusound_cmds, nusound_nseen);
 }
-
 
 void ps2_dump_archive(const char *when) {
     u32 app = ps2_r32(0x004432ACu);

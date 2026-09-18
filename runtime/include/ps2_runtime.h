@@ -29,6 +29,12 @@ typedef int64_t  s64;
 #endif
 
 #if defined(__GNUC__)
+#  define PS2_NOIPA __attribute__((noipa))
+#else
+#  define PS2_NOIPA
+#endif
+
+#if defined(__GNUC__)
 #  define PS2_ENV(name) __extension__ ({                                       \
        static int ps2_env_cache_ = -1;                                         \
        if (ps2_env_cache_ < 0) ps2_env_cache_ = getenv(name) != NULL;          \
@@ -134,6 +140,8 @@ typedef struct ps2_symbol {
 extern const ps2_symbol ps2_symbols[];
 extern const unsigned ps2_symbol_count;
 const char *ps2_symbol_name(u32 addr);
+int  ps2_symbol_add(u32 addr, const char *name);
+u32  ps2_symbol_find(const char *name);
 
 #ifndef PS2_TRACE_CALLS
 #  define PS2_TRACE_CALLS 1
@@ -165,6 +173,7 @@ extern u32 ps2_prof_base, ps2_prof_size;
 #endif
 void ps2_dump_trace(const char *why);
 void ps2_preempt(void);
+int  ps2_kernel_on_ee_thread(void);
 
 extern u32 ps2_loop_ctr;
 void ps2_loop_service(void);
@@ -348,6 +357,8 @@ void ps2_syscall(ps2_ctx *ctx);
 void ps2_trap(ps2_ctx *ctx, u32 insn);
 void ps2_unimplemented(ps2_ctx *ctx, u32 pc, u32 insn);
 void ps2_dispatch(ps2_ctx *ctx, u32 addr);
+ps2_fn ps2_dispatch_lookup(u32 addr);
+int    ps2_dispatch_redirect(u32 addr, ps2_fn fn);
 void ps2_unknown_target(ps2_ctx *ctx, u32 addr);
 
 u32  ps2_cfc1(ps2_ctx *ctx, int reg);
@@ -452,6 +463,8 @@ void ps2_phase_init(void);
 void ps2_phase_report(u64 fields);
 void ps2_sampler_start(void);
 void ps2_sampler_report(unsigned top);
+void ps2_host_prof_attach(const char *who);
+void ps2_host_prof_report(void);
 double ps2_wall_seconds(void);
 
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__)

@@ -24,3 +24,12 @@ __pycache__/
 *.bak
 *.bak[0-9]
 *~
+
+*.PAC
+*.pac
+tests/mods/**/*.dll
+saves/mods/
+tests/mods/mount_test/
+tests/mods/archive_test/
+tests/mods/bgm_test/
+tests/mods_resize/

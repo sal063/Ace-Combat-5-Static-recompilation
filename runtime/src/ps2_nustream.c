@@ -1,5 +1,6 @@
 #include "ps2_nustream.h"
 #include "ps2_hle.h"
+#include "ps2_vfs.h"
 #include <SDL3/SDL.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,24 +24,8 @@ static u32 disk_offset(const nu_stream *s, u32 byte, u32 ch) {
          + ch * s->interleave + byte % s->interleave;
 }
 static int read_bytes(const ps2_disc_file *f, u64 pos, u32 size, u8 *out) {
-    u8 sector[2048];
     if (!f || pos + size > f->size) return 0;
-    while (size) {
-        if (!(pos % 2048) && size >= 2048) {
-            u32 sectors = size / 2048;
-            if (ps2_iso_read_host(f->lsn + (u32)(pos / 2048), sectors, out)
-                != (int)sectors) return 0;
-            u32 bytes = sectors * 2048;
-            out += bytes; pos += bytes; size -= bytes;
-            continue;
-        }
-        u32 skip = (u32)(pos % 2048), n = 2048 - skip;
-        if (n > size) n = size;
-        if (ps2_iso_read_host(f->lsn + (u32)(pos / 2048), 1, sector) != 1) return 0;
-        memcpy(out, sector + skip, n);
-        out += n; pos += n; size -= n;
-    }
-    return 1;
+    return ps2_vfs_read(f, pos, size, out) == (int)size;
 }
 
 void ps2_nustream_command(u32 cmd, const u32 *a, const char *name) {
@@ -55,7 +40,7 @@ void ps2_nustream_command(u32 cmd, const u32 *a, const char *name) {
             candidate.interleave >= 16 && candidate.interleave <= 0x10000 &&
             !(candidate.interleave & 15) && candidate.bytes <= 32u*1024*1024) {
             u32 span = disk_offset(&candidate, candidate.bytes - 16, candidate.channels - 1) + 16;
-            const ps2_disc_file *f = ps2_iso_find(name);
+            const ps2_disc_file *f = ps2_vfs_find(name);
             u8 header[4];
             data = (u8 *)malloc(span);
             if (!data || !read_bytes(f, a[6], 4, header) || memcmp(header, "NPSF", 4) ||
@@ -138,9 +123,9 @@ int ps2_nustream_selftest(void) {
 
 int ps2_nustream_file_selftest(const char *disc) {
     const u32 offsets[] = {0, 0x19800, 0x41800, 0x1a295800, 0xb2000};
-    if (ps2_iso_open(disc)) return 1;
+    if (ps2_vfs_open(disc)) return 1;
     const char *name = "cd:\\BIN\\RADIOEE.PAC";
-    const ps2_disc_file *f = ps2_iso_find(name);
+    const ps2_disc_file *f = ps2_vfs_find(name);
     int fail = 0;
     for (u32 i = 0; i < sizeof offsets / sizeof offsets[0]; i++) {
         u32 h[16], args[7] = {0}, pos, eof = 0;

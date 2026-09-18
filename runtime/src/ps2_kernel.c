@@ -1,6 +1,8 @@
 #include "ps2_runtime.h"
 #include "ps2_hle.h"
 #include "ps2_statecap.h"
+#include "ps2_modapi.h"
+#include "ps2_settings.h"
 
 int ps2_gs_present(void);
 void ps2_gs_stats(u64 *prims, u64 *pixels, u64 *regs);
@@ -168,6 +170,13 @@ void ps2_loop_service(void) {
         }
     }
     ps2_preempt();
+}
+
+int ps2_kernel_on_ee_thread(void) {
+    int self = self_tid;
+    if (self < 0) return 0;
+    if (in_intr) return 1;
+    return current_tid == self;
 }
 
 static int run_pending_vblanks(int owner) {
@@ -514,8 +523,10 @@ static void offer_token(void) {
     pthread_mutex_unlock(&ee_lock);
 }
 
+static u64 ps2_preempt_calls;
 void ps2_preempt(void) {
     int self;
+    ps2_preempt_calls++;
     check_thread_termination();
     if (in_intr) {
         static int said;
@@ -991,6 +1002,8 @@ static void deliver_vblank(void) {
     ps2_gs_vblank();
     ps2_timers_tick();
     ps2_pad_latch();
+    ps2_settings_apply_game_patches();
+    ps2_modapi_field_tick();
     if (vsync_flag_ptr) ps2_w32(vsync_flag_ptr, vsync_flag_val);
     ps2_kernel_run_intc(&intr_ctx, 2);
     ps2_kernel_run_intc(&intr_ctx, 3);
@@ -1368,6 +1381,12 @@ void ps2_kernel_report(void) {
     ps2_timers_report();
     ps2_log("---- kernel state ----");
     ps2_log("vblanks delivered   : %llu", (unsigned long long)vblank_delivered);
+    ps2_log("preempt offers      : %llu  (~%llu entries, ~%llu per field)",
+            (unsigned long long)ps2_preempt_calls,
+            (unsigned long long)(ps2_preempt_calls * 4096ull),
+            vblank_delivered
+                ? (unsigned long long)(ps2_preempt_calls * 4096ull / vblank_delivered)
+                : 0ull);
     for (int i = 0; i < PS2_MAX_THREADS; i++) {
         if (!threads[i].used) continue;
         ps2_log("thread %-3d status=%02X prio=%-3d entry=%08X waiting_sema=%d%s",

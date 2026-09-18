@@ -31,16 +31,6 @@ typedef struct ps2_disc_file {
     u32 flag;
 } ps2_disc_file;
 
-int   ps2_iso_open(const char *path);
-const ps2_disc_file *ps2_iso_find(const char *name);
-int   ps2_iso_read(u32 lsn, u32 sectors, u32 guest_addr);
-int   ps2_iso_read_host(u32 lsn, u32 sectors, void *dst);
-int   ps2_iso_read_file(const ps2_disc_file *f, u64 pos, u32 len,
-                        u32 guest_addr);
-u32   ps2_iso_file_count(void);
-void  ps2_iso_dump(u32 max);
-int   ps2_iso_ready(void);
-
 typedef int (*ps2_rpc_fn)(ps2_ctx *ctx, u32 fno, u32 send, int ssize,
                           u32 recv, int rsize);
 

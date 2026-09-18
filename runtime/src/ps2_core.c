@@ -179,6 +179,19 @@ void ps2_build_dispatch(void) {
             (ps2_text_hi - ps2_text_lo) / 4);
 }
 
+ps2_fn ps2_dispatch_lookup(u32 addr) {
+    u32 off = addr - ps2_text_lo;
+    if ((addr & 3u) || off >= (ps2_text_hi - ps2_text_lo)) return NULL;
+    return ps2_fn_index[off >> 2];
+}
+
+int ps2_dispatch_redirect(u32 addr, ps2_fn fn) {
+    u32 off = addr - ps2_text_lo;
+    if ((addr & 3u) || off >= (ps2_text_hi - ps2_text_lo)) return -1;
+    ps2_fn_index[off >> 2] = fn;
+    return 0;
+}
+
 int ps2_fn_known(u32 addr) {
     u32 off = addr - ps2_text_lo;
     if (off >= (ps2_text_hi - ps2_text_lo)) return 0;
@@ -474,6 +487,10 @@ int  ps2_exit_pending(void) {
     return __atomic_load_n(&ps2_exit_requested, __ATOMIC_ACQUIRE);
 }
 
+typedef struct { u32 addr; char *name; } runtime_symbol;
+static runtime_symbol *rt_syms;
+static unsigned rt_nsyms, rt_csyms;
+
 const char *ps2_symbol_name(u32 addr) {
     unsigned lo = 0, hi = ps2_symbol_count;
     while (lo < hi) {
@@ -482,7 +499,57 @@ const char *ps2_symbol_name(u32 addr) {
         if (ps2_symbols[mid].addr < addr) lo = mid + 1;
         else hi = mid;
     }
+    lo = 0;
+    hi = rt_nsyms;
+    while (lo < hi) {
+        unsigned mid = (lo + hi) / 2;
+        if (rt_syms[mid].addr == addr) return rt_syms[mid].name;
+        if (rt_syms[mid].addr < addr) lo = mid + 1;
+        else hi = mid;
+    }
     return NULL;
+}
+
+int ps2_symbol_add(u32 addr, const char *name) {
+    unsigned at = 0, lo = 0, hi = rt_nsyms;
+    size_t len;
+    if (!name || !*name) return -1;
+    for (unsigned i = 0; i < ps2_symbol_count; i++)
+        if (ps2_symbols[i].addr == addr) return -1;
+    while (lo < hi) {
+        unsigned mid = (lo + hi) / 2;
+        if (rt_syms[mid].addr == addr) return -1;
+        if (rt_syms[mid].addr < addr) lo = mid + 1;
+        else hi = mid;
+    }
+    at = lo;
+    if (rt_nsyms == rt_csyms) {
+        runtime_symbol *grown;
+        rt_csyms = rt_csyms ? rt_csyms * 2u : 256u;
+        grown = (runtime_symbol *)realloc(rt_syms, rt_csyms * sizeof *rt_syms);
+        if (!grown) return -1;
+        rt_syms = grown;
+    }
+    len = strlen(name) + 1;
+    memmove(&rt_syms[at + 1], &rt_syms[at], (rt_nsyms - at) * sizeof *rt_syms);
+    rt_syms[at].addr = addr;
+    rt_syms[at].name = (char *)malloc(len);
+    if (!rt_syms[at].name) {
+        memmove(&rt_syms[at], &rt_syms[at + 1], (rt_nsyms - at) * sizeof *rt_syms);
+        return -1;
+    }
+    memcpy(rt_syms[at].name, name, len);
+    rt_nsyms++;
+    return 0;
+}
+
+u32 ps2_symbol_find(const char *name) {
+    if (!name) return 0;
+    for (unsigned i = 0; i < ps2_symbol_count; i++)
+        if (!strcmp(ps2_symbols[i].name, name)) return ps2_symbols[i].addr;
+    for (unsigned i = 0; i < rt_nsyms; i++)
+        if (!strcmp(rt_syms[i].name, name)) return rt_syms[i].addr;
+    return 0;
 }
 
 u32 *ps2_prof;

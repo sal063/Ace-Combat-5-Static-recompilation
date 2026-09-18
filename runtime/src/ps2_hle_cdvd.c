@@ -1,5 +1,6 @@
 #include "ps2_runtime.h"
 #include "ps2_hle.h"
+#include "ps2_vfs.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -52,7 +53,7 @@ void hle_sceCdInit(ps2_ctx *ctx) {
     if (!cd_inited) {
         cd_inited = 1;
         ps2_log("cdvd: init mode=%u, %u files on disc",
-                ps2_arg(ctx, 0), ps2_iso_file_count());
+                ps2_arg(ctx, 0), ps2_vfs_file_count());
     }
     HRET(1);
 }
@@ -92,7 +93,7 @@ static void search_file(ps2_ctx *ctx, u32 fp, u32 name_addr) {
     const ps2_disc_file *f;
     ps2_get_str(name_addr, name, sizeof(name));
     cd_searches++;
-    f = ps2_iso_find(name);
+    f = ps2_vfs_find(name);
     if (ps2_verbose)
         ps2_log("cdvd: search '%s' -> %s", name,
                 f ? "found" : "MISSING");
@@ -120,12 +121,12 @@ void hle_sceCdRead(ps2_ctx *ctx) {
     u32 sectors = ps2_arg(ctx, 1);
     u32 buf = ps2_arg(ctx, 2);
     int rc;
-    if (!ps2_iso_ready()) {
+    if (!ps2_vfs_ready()) {
         cd_error = SCECdErNODISC;
         HRET(0);
         return;
     }
-    rc = ps2_iso_read(lbn, sectors, buf);
+    rc = ps2_vfs_read_sectors_guest(lbn, sectors, buf);
     if (rc < 0) {
         cd_error = SCECdErREAD;
         ps2_log("cdvd: read failed lbn=%u sectors=%u", lbn, sectors);
@@ -155,7 +156,7 @@ void hle_sceCdGetError(ps2_ctx *ctx) { HRET(cd_error); }
 void hle_sceCdStatus(ps2_ctx *ctx) { HRET(SCECdStatPause); }
 
 void hle_sceCdDiskReady(ps2_ctx *ctx) {
-    HRET(ps2_iso_ready() ? SCECdComplete : SCECdNotReady);
+    HRET(ps2_vfs_ready() ? SCECdComplete : SCECdNotReady);
 }
 
 void hle_sceCdGetDiskType(ps2_ctx *ctx) { HRET(SCECdPS2DVD); }
@@ -225,7 +226,7 @@ static int cdvd_ready_rpc(ps2_ctx *ctx, u32 fno, u32 send, int ssize,
         for (i = 0; i < rsize; i += 4) ps2_w32(recv + (u32)i, 0);
     }
     if (recv && rsize >= 4)
-        ps2_w32(recv, ps2_iso_ready() ? SCECdComplete : SCECdNotReady);
+        ps2_w32(recv, ps2_vfs_ready() ? SCECdComplete : SCECdNotReady);
     return 0;
 }
 

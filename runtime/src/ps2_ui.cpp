@@ -387,8 +387,17 @@ void widescreen_control() {
         changed(0);
     }
     help("Applies the 16:9 patch from PCSX2's patch database (by nemesis2000) to the game's "
-         "own camera, so the 3D view really is wider instead of stretched. The patch does not "
-         "touch the 2D HUD, which will look wider. Use Auto or 16:9 aspect with it.");
+         "own camera, so the 3D view really is wider instead of stretched. Use Auto or 16:9 "
+         "aspect with it.");
+    if (ws) {
+        static const char *const HUD_LAYOUTS[] = { "Stretched with the picture",
+                                                   "4:3 in the centre" };
+        if (ImGui::Combo("HUD layout", &ps2_cfg.hud_layout, HUD_LAYOUTS, 2)) changed(0);
+        help("The game's HUD is laid out for 4:3. Centred draws the screen-fixed parts -- "
+             "tapes, readouts, radar, captions -- at their own proportions in the middle of "
+             "the screen; markers placed on things in the world stay on them. Needs the "
+             "native 2D layer (on unless PS2_RN_2D=0).");
+    }
     if (ws && ps2_cfg.aspect == PS2_ASPECT_STRETCH && g_window) {
         int w = 0, h = 0;
         SDL_GetWindowSizeInPixels(g_window, &w, &h);

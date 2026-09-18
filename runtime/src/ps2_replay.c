@@ -3,6 +3,8 @@
 #include "ps2_hle.h"
 #include "ps2_capture.h"
 #include "ps2_vk.h"
+#include "ps2_modapi.h"
+#include "rn.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -212,6 +214,22 @@ static void replay_pass(u32 field_limit, pass_result *res) {
             if (ok) ps2_mmio_w32(a, v);
             break;
         }
+        case PS2_CAP_OP_TAG: {
+            u32 kind = rd_u8(&ok);
+            u32 a = rd_u32(&ok);
+            u32 b = rd_u32(&ok);
+            if (ok) rn_gs_tag(kind, a, b);
+            break;
+        }
+        case PS2_CAP_OP_INTENT: {
+            u32 len = rd_u32(&ok);
+            const u8 *p;
+            if (!ok) break;
+            p = len ? rb_payload(len) : NULL;
+            if (len && !p) { ok = 0; break; }
+            rn_gs_intent(p, len);
+            break;
+        }
         case PS2_CAP_OP_VIFQW:
         case PS2_CAP_OP_GIFQW: {
             int is_vif = op == PS2_CAP_OP_VIFQW;
@@ -358,6 +376,7 @@ int main(int argc, char **argv) {
     const char *path = "out/capture.gscap";
     const char *shot = "ps2_replay.ppm";
     int want_video = 1, bench = 0, loops = 1, census = 0;
+    u32 fuzz_start = 0, fuzz_iters = 0, fuzz_seed = 1;
     u32 field_limit = 0;
     double t_total = 0.0;
     u64 fields_total = 0;
@@ -379,6 +398,12 @@ int main(int argc, char **argv) {
             loops = (int)strtol(argv[++i], NULL, 0);
         else if (!strcmp(argv[i], "--fields") && i + 1 < argc)
             field_limit = (u32)strtoul(argv[++i], NULL, 0);
+        else if (!strcmp(argv[i], "--vp-fuzz") && i + 2 < argc) {
+            fuzz_start = (u32)strtoul(argv[++i], NULL, 16);
+            fuzz_iters = (u32)strtoul(argv[++i], NULL, 0);
+            if (i + 1 < argc && argv[i + 1][0] != '-' && strchr(argv[i + 1], '.') == NULL)
+                fuzz_seed = (u32)strtoul(argv[++i], NULL, 0);
+        }
         else if (argv[i][0] != '-') path = argv[i];
         else { usage(argv[0]); return strcmp(argv[i], "--help") ? 1 : 0; }
     }
@@ -386,6 +411,8 @@ int main(int argc, char **argv) {
     { const char *e = getenv("PS2_CENSUS");
       ps2_diag_armed = census || (e && atoi(e) != 0); }
 
+    rn_dump_init();
+    rn_vp_init();
     rf = fopen(path, "rb");
     if (!rf) { fprintf(stderr, "[REPLAY] cannot open %s\n", path); return 1; }
     if (fread(&hdr, sizeof hdr, 1, rf) != 1
@@ -450,6 +477,11 @@ int main(int argc, char **argv) {
                 nz, hdr.nblk);
     }
 
+    if (fuzz_start) {
+        restore_snapshot();
+        return rn_vpfuzz_main(fuzz_start, fuzz_iters ? fuzz_iters : 100u, fuzz_seed);
+    }
+
     ps2_cap_dict_config(hdr.dict_slots, hdr.dict_min, hdr.dict_max,
                         hdr.dict_budget);
 
@@ -476,6 +508,7 @@ int main(int argc, char **argv) {
     rbuf = (u8 *)malloc(RB_CAP);
     if (!rbuf) { fprintf(stderr, "[REPLAY] out of memory\n"); return 1; }
 
+    ps2_host_prof_attach("gfx");
     for (pass = 0; loops == 0 || pass < loops; pass++) {
         pass_result r;
         double t0, dt;
@@ -541,6 +574,11 @@ int main(int argc, char **argv) {
                 (double)fields_total / t_total,
                 t_total * 1000.0 / (double)fields_total);
     fclose(rf);
+    ps2_host_prof_report();
+    rn_report();
+    {   extern int ps2_vk_enabled(void);
+        extern void ps2_video_report(void);
+        if (ps2_vk_enabled()) ps2_video_report(); }
 
     if (want_video) ps2_vk_screenshot(shot);
     else if (shot && *shot) {
@@ -572,7 +610,16 @@ const ps2_symbol     ps2_symbols[] = { { 0u, "" } };
 const unsigned       ps2_symbol_count = 0u;
 
 volatile int ps2_capture_request;
+void ps2_modapi_field_tick(void) {}
+void ps2_modapi_input(ps2_pad_state *pads, int ports) { (void)pads; (void)ports; }
+
 void ps2_capture_report(const char *why) { (void)why; }
+int rn_taps_on;
+void rn_dma_attrib_slow(int ch, u32 tadr) { (void)ch; (void)tadr; }
+int rn_intents_pending;
+void rn_dma_transfer_slow(int ch, u32 madr, u32 qwc, int after) {
+    (void)ch; (void)madr; (void)qwc; (void)after;
+}
 unsigned ps2_vblank_budget(void) { return 0u; }
 void ps2_finish(const char *why) {
     fprintf(stderr, "[REPLAY] finish: %s\n", why ? why : "?");

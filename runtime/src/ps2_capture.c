@@ -386,6 +386,21 @@ void ps2_cap_mmio(u32 addr, u32 val) {
     cap_u32(val);
 }
 
+void ps2_cap_intent(const u8 *rec, u32 len) {
+    if (!g_cap_deep) return;
+    if (!cap_begin(PS2_CAP_OP_INTENT, 4)) return;
+    cap_u32(len);
+    cap_bytes(rec, len);
+}
+
+void ps2_cap_tag(u32 kind, u32 a, u32 b) {
+    if (!g_cap_deep) return;
+    if (!cap_begin(PS2_CAP_OP_TAG, 1 + 4 + 4)) return;
+    cap_u8((u8)kind);
+    cap_u32(a);
+    cap_u32(b);
+}
+
 static void cap_index_push(u32 field) {
     if (g_index_n == g_index_cap) {
         u32 want = g_index_cap ? g_index_cap * 2u : 4096u;

@@ -14,10 +14,11 @@ for pressed,want in expected.items():
  held={i for i,p in abstract.items() if p>=32}
  assert held=={want},(pressed,held,want)
  print(pressed,'->',want,'PASS')
-iso=(root/'runtime/src/ps2_iso.c').read_text()
-assert '_fseeki64(fp, (s64)offset, SEEK_SET)' in iso
+iso=(root/'runtime/src/ps2_vfs.c').read_text()
+assert '_fseeki64(fp, (long long)off, SEEK_SET)' in iso
 assert not re.search(r'\bfseek\(',iso)
-assert 'disc_seek(iso_fp, (u64)lsn * ISO_SECTOR)' in iso
+assert 'seek64(image_fp, (u64)lsn * SECTOR)' in iso
+assert 'seek64(image_fp, n->image_off + pos)' in iso
 print('ISO offsets stay 64-bit at seek call sites: PASS')
 assert 'cached = PAD_PATH_LIBPAD2;' in s
 assert 'if (buf) ps2_w8(buf, 3);' in s

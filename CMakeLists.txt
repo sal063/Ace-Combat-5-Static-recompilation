@@ -22,12 +22,15 @@ find_package(Vulkan REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SDL3 REQUIRED sdl3)
 
-file(GLOB GENERATED_SOURCES CONFIGURE_DEPENDS
-     "${CMAKE_SOURCE_DIR}/generated/ps2_code_*.c")
+set(PS2_GENERATED_DIR "generated" CACHE STRING
+    "recompiler output directory, relative to the source tree")
+set(GEN_DIR "${CMAKE_SOURCE_DIR}/${PS2_GENERATED_DIR}")
+
+file(GLOB GENERATED_SOURCES CONFIGURE_DEPENDS "${GEN_DIR}/ps2_code_*.c")
 list(APPEND GENERATED_SOURCES
-     "${CMAKE_SOURCE_DIR}/generated/ps2_func_table.c"
-     "${CMAKE_SOURCE_DIR}/generated/ps2_image.c"
-     "${CMAKE_SOURCE_DIR}/generated/ps2_symbols.c")
+     "${GEN_DIR}/ps2_func_table.c"
+     "${GEN_DIR}/ps2_image.c"
+     "${GEN_DIR}/ps2_symbols.c")
 
 if(NOT GENERATED_SOURCES)
   message(FATAL_ERROR
@@ -37,6 +40,7 @@ endif()
 
 set(RUNTIME_SOURCES
     runtime/src/ps2_core.c
+    runtime/src/ps2_hostprof.c
     runtime/src/ps2_hw.c
     runtime/src/ps2_gfxq.c
     runtime/src/ps2_gs.c
@@ -48,7 +52,7 @@ set(RUNTIME_SOURCES
     runtime/src/ps2_memcard.c
     runtime/src/ps2_audio.c
     runtime/src/ps2_sif.c
-    runtime/src/ps2_iso.c
+    runtime/src/ps2_vfs.c
     runtime/src/ps2_hle_sif.c
     runtime/src/ps2_hle_cdvd.c
     runtime/src/ps2_hle_pad.c
@@ -58,8 +62,43 @@ set(RUNTIME_SOURCES
     runtime/src/ps2_capture.c
     runtime/src/ps2_statecap.c
     runtime/src/ps2_settings.c
+    runtime/src/ps2_mod.c
+    runtime/src/ps2_hook.c
+    runtime/src/ps2_modapi.c
+    runtime/src/ps2_patch.c
+    runtime/src/ps2_params.c
+    runtime/src/ps2_lua.c
     runtime/src/ps2_ui.cpp
+    runtime/src/rn/rn_census.c
+    runtime/src/rn/rn_2d.c
+    runtime/src/rn/rn_dump.c
+    runtime/src/rn/rn_vp.c
+    runtime/src/rn/rn_vp_model.c
+    runtime/src/rn/rn_vp_terrain.c
+    runtime/src/rn/rn_vp_shadow.c
+    runtime/src/rn/rn_vp_sprite.c
+    runtime/src/rn/rn_vp_load.c
+    runtime/src/rn/rn_vp_lit.c
+    runtime/src/rn/rn_vp_fx.c
+    runtime/src/rn/rn_vp_flat.c
+    runtime/src/rn/rn_vpfuzz.c
+    runtime/src/rn/rn_intent.c
+    runtime/src/rn/rn_fixes.c
+    runtime/src/rn/rn_sun.c
+    runtime/src/rn/rn_sky.c
+    runtime/src/rn/rn_tri3d.c
+    runtime/src/rn/rn_billboard.c
+    runtime/src/rn/rn_worldtri.c
+    runtime/src/rn/rn_screen.c
+    runtime/src/rn/rn_tap.c
     runtime/src/ps2_main.c)
+
+set(LUA_DIR "${CMAKE_SOURCE_DIR}/third_party/lua")
+file(GLOB LUA_SOURCES CONFIGURE_DEPENDS "${LUA_DIR}/*.c")
+add_library(lua54 STATIC ${LUA_SOURCES})
+target_include_directories(lua54 PUBLIC "${LUA_DIR}")
+set_source_files_properties(${LUA_SOURCES} PROPERTIES COMPILE_OPTIONS "-w")
+target_compile_options(lua54 PRIVATE -O2)
 
 set(IMGUI_DIR "${CMAKE_SOURCE_DIR}/third_party/imgui")
 set(IMGUI_SOURCES
@@ -73,16 +112,21 @@ set_source_files_properties(${IMGUI_SOURCES} PROPERTIES COMPILE_OPTIONS "-w")
 list(APPEND RUNTIME_SOURCES ${IMGUI_SOURCES})
 
 add_executable(ac5 ${RUNTIME_SOURCES} ${GENERATED_SOURCES})
-target_include_directories(ac5 PRIVATE runtime/include generated
+target_include_directories(ac5 PRIVATE runtime/include "${GEN_DIR}"
                                        ${IMGUI_DIR} ${IMGUI_DIR}/backends
                                        ${SDL3_INCLUDE_DIRS} ${Vulkan_INCLUDE_DIRS})
 target_link_directories(ac5 PRIVATE ${SDL3_LIBRARY_DIRS})
 target_link_libraries(ac5 PRIVATE Threads::Threads m
-                                  ${SDL3_LIBRARIES} Vulkan::Vulkan)
+                                  ${SDL3_LIBRARIES} Vulkan::Vulkan lua54)
 target_link_options(ac5 PRIVATE -static-libstdc++ -static-libgcc)
 
+option(PS2_HOOK_ENTRIES "patchable entry sleds in generated code, for mod hooks" ON)
+set(GEN_COMPILE_OPTIONS "${GEN_OPT}")
+if(PS2_HOOK_ENTRIES)
+  list(APPEND GEN_COMPILE_OPTIONS "-fpatchable-function-entry=8")
+endif()
 set_source_files_properties(${GENERATED_SOURCES} PROPERTIES
-                            COMPILE_OPTIONS "${GEN_OPT}")
+                            COMPILE_OPTIONS "${GEN_COMPILE_OPTIONS}")
 
 set(HOT_SOURCES runtime/src/ps2_vu.c runtime/src/ps2_gs.c runtime/src/ps2_hw.c)
 set_source_files_properties(${HOT_SOURCES} PROPERTIES COMPILE_OPTIONS "-O3")
@@ -99,11 +143,21 @@ target_compile_options(ac5 PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions -fno-rtti>)
 
 set(REPLAY_SOURCES ${RUNTIME_SOURCES})
-list(REMOVE_ITEM REPLAY_SOURCES runtime/src/ps2_main.c)
+list(REMOVE_ITEM REPLAY_SOURCES runtime/src/ps2_main.c
+                                runtime/src/ps2_lua.c
+                                runtime/src/ps2_modapi.c
+                                runtime/src/ps2_mod.c
+                                runtime/src/ps2_hook.c
+                                runtime/src/ps2_patch.c
+                                runtime/src/ps2_params.c
+                                runtime/src/rn/rn_intent.c
+                                runtime/src/rn/rn_fixes.c
+                                runtime/src/rn/rn_tap.c)
 list(APPEND REPLAY_SOURCES runtime/src/ps2_replay.c)
 
 add_executable(gsreplay ${REPLAY_SOURCES})
-target_include_directories(gsreplay PRIVATE runtime/include generated
+target_include_directories(gsreplay PRIVATE runtime/include "${GEN_DIR}"
+                                            "${LUA_DIR}"
                                             ${IMGUI_DIR} ${IMGUI_DIR}/backends
                                             ${SDL3_INCLUDE_DIRS}
                                             ${Vulkan_INCLUDE_DIRS})
@@ -129,7 +183,8 @@ endif()
 set(SHADER_OUT "${CMAKE_BINARY_DIR}/shaders")
 file(MAKE_DIRECTORY "${SHADER_OUT}")
 set(SPV_FILES)
-foreach(SH gs.vert gs.frag gs_zcopy.frag colclip.frag present.vert present.frag)
+foreach(SH gs.vert gs.frag gs_zcopy.frag colclip.frag present.vert present.frag
+           rn_vis.frag rn_sun.vert rn_sun.frag mesh.vert mesh.frag)
   add_custom_command(
     OUTPUT "${SHADER_OUT}/${SH}.spv"
     COMMAND "${GLSLC}" -O "${CMAKE_SOURCE_DIR}/runtime/shaders/${SH}"

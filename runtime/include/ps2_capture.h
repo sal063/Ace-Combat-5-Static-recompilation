@@ -103,7 +103,9 @@ enum {
     PS2_CAP_OP_FIELD  = 11,
     PS2_CAP_OP_STATS  = 12,
     PS2_CAP_OP_END    = 13,
-    PS2_CAP_OP_VIFCLR = 14
+    PS2_CAP_OP_VIFCLR = 14,
+    PS2_CAP_OP_TAG    = 15,
+    PS2_CAP_OP_INTENT = 16
 };
 
 extern int g_cap_recording;
@@ -132,6 +134,8 @@ void ps2_cap_vif_word(int ch, u32 word);
 void ps2_cap_vif_reset(int ch, u32 val);
 void ps2_cap_vif_clear(int ch);
 void ps2_cap_mmio(u32 addr, u32 val);
+void ps2_cap_tag(u32 kind, u32 a, u32 b);
+void ps2_cap_intent(const u8 *rec, u32 len);
 
 void ps2_mkdir_p(const char *path);
 

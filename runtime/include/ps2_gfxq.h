@@ -27,6 +27,8 @@ void ps2_gfxq_fbrst(int ch, u32 val);
 void ps2_gfxq_vif_clear(int ch);
 void ps2_gfxq_gs_priv(u32 addr, u64 val);
 void ps2_gfxq_mmio(u32 addr, u32 val);
+void ps2_gfxq_tag(u32 kind, u32 a, u32 b);
+void ps2_gfxq_intent(const u8 *rec, u32 len);
 int  ps2_gfxq_field(void);
 
 #ifdef __cplusplus

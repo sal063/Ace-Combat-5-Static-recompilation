@@ -1,0 +1,99 @@
+# Names for SLUS_208.51's functions, recovered by tools/ida/export_game_symbols.py.
+# ADDRESS NAME  # where the name comes from
+00101B70 pac_ReadTable  # read from the code: reads DATA.TBL, or datapack.bin in mode 0
+00101D98 pac_QueueMember  # read from the code: appends a member to the load (at most 7)
+00101DE0 pac_BufferSize  # read from the code: sums the queued members' unpacked sizes
+00102060 pac_StartLoad  # read from the code: sets the buffer and starts the load
+001020D8 pac_Poll  # read from the code: the loader state machine, polled per frame
+001029E0 pac_FileInMember  # read from the code: a file's address inside a loaded member
+00102A58 pac_MemberBase  # read from the code: a loaded member's base address
+00102A78 ulz_Setup  # read from the code: ULZ decoder set-up (state, packed, buffer)
+00102BF8 ulz_Step  # read from the code: ULZ decode, 2,500 control words a call
+0010E318 CEnemySoundJet::_OtrStart  # debug string
+00113EC8 sky_Render  # read from the code: sky object: buckets 1, 3, 9, 10 (sun Z sample), 12
+00114680 sky_SunEffects  # read from the code: occlusion chain, flare and lens ghosts into bucket 12
+00118BC8 sun_Flare  # read from the code: projects the sun, one textured eight-point fan
+0011A888 sun_ZSample  # read from the code: copies scene Z around the sun into a Z24 buffer
+0011AAF0 sun_OcclusionChain  # read from the code: box sample, depth test, box filter, CLUT alpha writes
+001281B8 Mpl::_Control  # debug string
+0012BEB0 player_Render  # read from the code: player object: HUD in bucket 11, cockpit and model
+0012DE58 Mpl::_SetLandingPosAng@0012DE58  # debug string
+00133E00 hud_Draw  # read from the code: flight HUD: ~40 element writers over prim_Write
+00160698 mission_Render  # read from the code: per-frame mission render: sky, player, message window
+00170918 CWeaponBin::_Read  # debug string
+00174F60 CUnitCtrl::_ControlOrderCom  # debug string
+00181770 Mpl::_SetLandingPosAng@00181770  # debug string
+001AA910 CComBin::_Read  # debug string
+001AA948 CFlagTblBin::_GetReadBuffSize  # debug string
+001AAAF8 CSubMisBin::_GetReadBuffSize  # debug string
+001AAD30 CSubMisTblBin::_GetReadBuffSize  # debug string
+001AAE60 CSubMisTblBin::_Read  # debug string
+001AAFD0 CComTblBin::_GetReadBuffSize  # debug string
+001AB018 CComTblBin::_Read  # debug string
+001AB160 CManeuverBin::_GetReadBuffSize  # debug string
+001AB9A0 CParamPlaneBin::_Read  # debug string
+001ABBF8 CParamGroundBin::_Read  # debug string
+001ACAE0 CSetBin::_GetReadBuffSize  # debug string
+001ACC10 CSetBin::_Read  # debug string
+001ACD88 CActBin::_GetReadBuffSize  # debug string
+001ACED0 CActBin::_Read  # debug string
+001AD060 COrderBin::_GetReadBuffSize  # debug string
+001ADA30 CUnitTblBin::_GetReadBuffSize  # debug string
+001ADBE8 CUnitTblBin::_Read  # debug string
+001ADDD8 CObjUBin::_GetReadBuffSize  # debug string
+001ADEE8 CObjUBin::_Read  # debug string
+001AE058 CUnitBin::_GetReadBuffSize  # debug string
+001AE1B8 CUnitBin::_Read  # debug string
+001AE3A8 CObjBin::_GetReadBuffSize  # debug string
+001AE910 CRadioBin::_GetReadBuffSize  # debug string
+001AEB00 CRadioTblBin::_GetReadBuffSize  # debug string
+001AEC10 CRadioTblBin::_Read  # debug string
+001AF6B0 CPlParamBs::_Read  # debug string
+001AF6E8 CAmParamBs::_Read  # debug string
+001B0680 sun_LensGhosts  # read from the code: eight sprites on the sun-to-centre axis
+00288218 CMuraFog::_Render  # debug string
+002BC6B0 CSelectFont::_InitFont  # debug string
+002D6E00 msgwin_Draw  # read from the code: radio caption window: name and text glyph sprites
+0031C388 main_Loop  # read from the code: the frame loop: pad, scene dispatch, draw
+0031CD70 CMalloc::_Free  # debug string
+0031CE00 CMalloc::_FreeMark  # debug string
+0031CF00 scene_Dispatch  # read from the code: calls table[obj+8][obj+9] of a scene machine
+0031CF88 scene_Next  # read from the code: commits the pending state at obj+10
+0031D268 File::_SetName  # debug string
+0031E018 bundle_Attach  # read from the code: count/base/offsets view of a member
+0031E030 bundle_File  # read from the code: base + offset, or 0 for an absent file
+0031E2F8 CDiskFile::CDiskFile  # debug string
+0031E400 CDiskFile::_Read  # debug string
+0031E6F0 CTim2::setVpos@0031E6F0  # debug string
+0031EE78 CTim2::setVpos@0031EE78  # debug string
+0031F2B0 tex_Upload  # read from the code: BITBLTBUF/TRXPOS/TRXREG/TRXDIR from a texture object
+0031FB88 prim_Write  # read from the code: PRIM/TEX0 then a PACKED run of 36-byte 2D vertices
+0031FF00 prim_Rect  # read from the code: a sprite from x, y, w, h and a colour via prim_Write
+0031FFB0 prim_Line  # read from the code: a line from two points and a colour via prim_Write
+00320098 CDoubleBuff::_Open  # read from the code: sets +21, returns the write pointer at +8
+003200D8 CDoubleBuff::_Close  # debug string
+00320390 COt::_Init  # read from the code: writes a `next` link per bucket into the buffer
+00320538 COt::_Open  # read from the code: links the bucket's tail to the buffer write pointer
+003205D0 COt::_Close  # read from the code: links the range end back to the bucket, closes at end+16
+00320648 COt::_Relink  # read from the code: one `next` from the table end to a fresh buffer range
+003216D0 CTxtio::_SetError  # debug string
+00321BA8 CTxtio::_Set  # debug string
+00321EE0 CTxtio::_SetComment  # debug string
+00322048 CTxtio::_Num2Str  # debug string
+003230F8 CTxtio::_GetBuffSize  # debug string
+00324130 CTxtio::_Decode  # debug string
+00324568 CTxtio::_GetS8  # read from the code: type 0, returns a signed byte
+00324688 CTxtio::_GetU8  # read from the code: type 1, returns an unsigned byte
+003247B0 CTxtio::_GetS16  # read from the code: type 2, returns a signed short
+00324910 CTxtio::_GetU16  # read from the code: type 3, returns an unsigned short
+00324A68 CTxtio::_GetS32  # read from the code: type 4, returns an int
+00324BC0 CTxtio::_GetInt  # read from the code: types 5 and 6, returns an int
+00324D10 CTxtio::_GetFloat  # read from the code: type 7, returns a float in $f0
+00324E68 CTxtio::_GetString  # read from the code: type 8, copies 128 bytes to arg 2
+00325020 CTxtio::_GetData  # read from the code: type 9, copies 256 bytes to arg 2
+00326360 DrawCtrl::setGraph  # debug string
+003265E8 DrawCtrl::_Flush  # read from the code: terminates both packet streams and kicks D1/D2
+00327500 DrawCtrl::_OpenGifPkt  # debug string
+00327540 DrawCtrl::_OpenVifPkt  # debug string
+00327580 DrawCtrl::_CloseGifPkt  # debug string
+003275C8 DrawCtrl::_CloseVifPkt  # debug string
