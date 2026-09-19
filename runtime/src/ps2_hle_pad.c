@@ -405,7 +405,7 @@ void hle_sceVibGetProfile(ps2_ctx *ctx) {
     const ps2_pad_state *st = state_for((int)ps2_arg(ctx, 0));
     u32 buf = ps2_arg(ctx, 1);
     if (!st->connected) { HRET(-1); return; }
-    if (buf) ps2_w8(buf, 0);
+    if (buf) ps2_w8(buf, 3);
     HRET(1);
 }
 

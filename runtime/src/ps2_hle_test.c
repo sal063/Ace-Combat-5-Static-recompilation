@@ -14,6 +14,7 @@ void hle_scePad2CreateSocket(ps2_ctx *);
 void hle_scePad2DeleteSocket(ps2_ctx *);
 void hle_sceVibGetProfile(ps2_ctx *);
 void ps2_iop_services_register(void);
+void ps2_build_dispatch(void);
 
 static u32 invoke(void (*fn)(ps2_ctx *), u32 a, u32 b, u32 c) {
     ps2_ctx ctx = {0};
@@ -27,6 +28,7 @@ static u32 invoke(void (*fn)(ps2_ctx *), u32 a, u32 b, u32 c) {
 int ps2_hle_selftest(const char *disc) {
     int fail = 0;
     const u32 send = 0x10000, recv = 0x11000;
+    ps2_build_dispatch();
     ps2_sif_hle_init();
     ps2_cdvd_init();
     ps2_cdvd_rpc_register();
@@ -64,7 +66,26 @@ int ps2_hle_selftest(const char *disc) {
     fail += invoke(hle_scePad2CreateSocket, 0, 0, 0) != 0;
     ps2_w8(recv, 0xff);
     fail += invoke(hle_sceVibGetProfile, 0, recv, 0) != 1;
-    fail += ps2_r8(recv) != 0;
+    fail += ps2_r8(recv) != 3;
+    {
+        ps2_ctx guest = {0};
+        ps2_w32(send + 580, 0);
+        ps2_w32(send + 616, 0);
+        ps2_pad_host[0].buttons = 8;
+        guest.r[4].ud[0] = send;
+        guest.r[29].ud[0] = 0x01ff0000;
+        ps2_dispatch(&guest, 0x0032ad00);
+        guest.r[4].ud[0] = send;
+        ps2_dispatch(&guest, 0x0032ad00);
+        int input_bad = ps2_r8(send + 920) != 0
+                     || !(ps2_r16(send + 916) & 8)
+                     || !(ps2_r16(send + 918) & 8);
+        fail += input_bad;
+        ps2_log("Game input consumer: %s (unsupported=%u held=%04x edge=%04x)",
+                input_bad ? "FAILED" : "passed", ps2_r8(send + 920),
+                ps2_r16(send + 916), ps2_r16(send + 918));
+        ps2_pad_host[0].buttons = 0;
+    }
     fail += invoke(hle_scePad2DeleteSocket, 0, 0, 0) != 1;
     fail += invoke(hle_scePad2DeleteSocket, 0, 0, 0) != (u32)-1;
     ps2_w8(recv + 5, 0xa5);
