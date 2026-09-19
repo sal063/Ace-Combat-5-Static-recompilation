@@ -172,7 +172,7 @@ typedef struct {
     int port, slot;
 } pad_socket;
 
-#define MAX_SOCKETS 8
+#define MAX_SOCKETS 16
 static pad_socket sockets[MAX_SOCKETS];
 static int pad_inited;
 static u64 pad_reads;
@@ -195,10 +195,15 @@ void ps2_pad_init(void) {
 }
 
 void hle_scePad2Init(ps2_ctx *ctx) {
-    if (!pad_inited) { pad_inited = 1; ps2_log("pad: libpad2 serviced natively"); }
-    HRET(0);
+    memset(sockets, 0, sizeof(sockets));
+    pad_inited = 1;
+    HRET(1);
 }
-void hle_scePad2End(ps2_ctx *ctx) { pad_inited = 0; HRET(0); }
+void hle_scePad2End(ps2_ctx *ctx) {
+    memset(sockets, 0, sizeof(sockets));
+    pad_inited = 0;
+    HRET(1);
+}
 
 void hle_scePad2CreateSocket(ps2_ctx *ctx) {
     u32 p = ps2_arg(ctx, 0);
@@ -218,8 +223,9 @@ void hle_scePad2CreateSocket(ps2_ctx *ctx) {
 
 void hle_scePad2DeleteSocket(ps2_ctx *ctx) {
     int s = (int)ps2_arg(ctx, 0);
-    if (s >= 0 && s < MAX_SOCKETS) sockets[s].used = 0;
-    HRET(0);
+    if (s < 0 || s >= MAX_SOCKETS || !sockets[s].used) { HRET(-1); return; }
+    memset(&sockets[s], 0, sizeof(sockets[s]));
+    HRET(1);
 }
 
 static const ps2_pad_state *state_for(int socket) {
@@ -399,7 +405,7 @@ void hle_sceVibGetProfile(ps2_ctx *ctx) {
     const ps2_pad_state *st = state_for((int)ps2_arg(ctx, 0));
     u32 buf = ps2_arg(ctx, 1);
     if (!st->connected) { HRET(-1); return; }
-    if (buf) ps2_w8(buf, 3);
+    if (buf) ps2_w8(buf, 0);
     HRET(1);
 }
 

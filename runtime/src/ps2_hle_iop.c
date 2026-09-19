@@ -23,7 +23,7 @@ void ps2_spu2_write(u32 dst, u32 iop_src, u32 size);
 
 static void zero_reply(u32 recv, int rsize) {
     if (recv && rsize > 0)
-        for (int i = 0; i < rsize; i += 4) ps2_w32(recv + (u32)i, 0);
+        for (int i = 0; i < rsize; i++) ps2_w8(recv + (u32)i, 0);
 }
 
 #define LGDEV_SID       0x046D046Du
@@ -233,22 +233,24 @@ static int nufile_rpc_inner(ps2_ctx *ctx, u32 fno, u32 send, int ssize,
     }
     case 5: {
         u32 fd     = ps2_r32(send + 0x08);
-        u32 off    = ps2_r32(send + 0x0C);
+        s32 off    = (s32)ps2_r32(send + 0x0C);
         u32 whence = ps2_r32(send + 0x10);
-        u64 size, pos;
+        s64 size, pos;
         if (fd >= NUFILE_MAX_FD || !nufile_fds[fd].used) {
             ps2_log("nufile: seek on bad handle %u", fd);
             ps2_w32(recv, (u32)-1);
             return 0;
         }
-        size = (u64)nufile_fds[fd].f->size;
-        if (whence == 1u)      pos = nufile_fds[fd].pos + (u64)off;
-        else if (whence == 2u) pos = size + (u64)off;
-        else                   pos = (u64)off;
+        size = nufile_fds[fd].f->size;
+        if (whence == 1u)      pos = (s64)nufile_fds[fd].pos + off;
+        else if (whence == 2u) pos = size + off;
+        else if (whence == 0u) pos = off;
+        else { ps2_w32(recv, (u32)-1); return 0; }
+        if (pos < 0) { ps2_w32(recv, (u32)-1); return 0; }
         if (pos > size) pos = size;
         nufile_fds[fd].pos = pos;
         if (ps2_verbose)
-            ps2_log("nufile: seek fd %u to %llu (off=%u whence=%u of %llu)",
+            ps2_log("nufile: seek fd %u to %llu (off=%d whence=%u of %llu)",
                     fd, (unsigned long long)pos, off, whence,
                     (unsigned long long)size);
         ps2_w32(recv, (u32)pos);
@@ -857,6 +859,18 @@ static u64 nusndstr_lists, nusndstr_desync;
 static u32 nusndstr_seq_seen;
 static struct { u32 command, token; } nusndstr_ack[48];
 static u16 nusndstr_output_mode;
+static void nusndstr_volume_regs(u32 *left, u32 *right) {
+    int l = (s16)*left, r = (s16)*right;
+    l = l < -0x4000 ? -0x4000 : l > 0x3fff ? 0x3fff : l;
+    r = r < -0x4000 ? -0x4000 : r > 0x3fff ? 0x3fff : r;
+    if (!nusndstr_output_mode) {
+        l = l < 0 ? -l : l;
+        r = r < 0 ? -r : r;
+        l = r = (l + r) / 2;
+    }
+    *left = (u32)l & 0x7fff;
+    *right = (u32)r & 0x7fff;
+}
 void ps2_spu2_command_lock(void);
 void ps2_spu2_command_unlock(void);
 u8 ps2_spu2_voice_status(u32);
@@ -1009,15 +1023,19 @@ static u64 nusndstr_walk(u32 send, int ssize) {
             u32 loop  = ps2_r32(send + off + 28u) & 0xFFu;
             if (ch < 48u) {
                 nusndstr_check_ssa(ch, ssa);
+                nusndstr_volume_regs(&voll, &volr);
                 ps2_spu2_set_voice(ch, ssa, pitch, adsr1, adsr2, voll, volr,
                                    (int)loop);
             }
             break;
         }
-        case 13u:
+        case 13u: {
+            u32 l = ps2_r16(send + off + 12u), r = ps2_r16(send + off + 14u);
+            nusndstr_volume_regs(&l, &r);
             ps2_spu2_stream_volume(ps2_r8(send + off + 8u),
-                                  ps2_r16(send + off + 12u), ps2_r16(send + off + 14u));
+                                  l, r);
             break;
+        }
         case 7u:
             nusndstr_output_mode = ps2_r16(send + off + 4u);
             break;
@@ -1121,6 +1139,21 @@ int ps2_nusndstr_fx_send_selftest(void) {
     u32 fx[7]   = {2,  1u, 1u << 2, 0,  2u, 1u << 3, 0};
     u32 keys[7] = {2, 10u, 1u << 2, 0, 11u, 1u << 3, 0};
     int fail = 0;
+    {
+        u16 saved_mode = nusndstr_output_mode;
+        for (u16 mode = 0; mode < 3; mode++) {
+            u32 l = (u16)-8192, r = 8192;
+            nusndstr_output_mode = mode;
+            nusndstr_volume_regs(&l, &r);
+            fail += l != (mode ? 0x6000u : 0x2000u) || r != 0x2000u;
+        }
+        nusndstr_output_mode = 1;
+        u32 l = (u16)-32768, r = 32767;
+        nusndstr_volume_regs(&l, &r);
+        fail += l != 0x4000u || r != 0x3fffu;
+        nusndstr_output_mode = saved_mode;
+        ps2_log("nusndstr signed-volume selftest: %s", fail ? "FAILED" : "passed");
+    }
     ps2_spu2_key_on_mask(1u << 3, 0);
     ps2_put_mem(send, (u8 *)fx, sizeof fx);
     nusndstr_walk(send, (int)sizeof fx);

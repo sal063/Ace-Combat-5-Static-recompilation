@@ -52,6 +52,7 @@ typedef struct {
     s16 buf[28];
     int have;
     int idx;
+    s16 previous;
     int s1, s2;
     s16 voll, volr;
     u32 adsr1, adsr2;
@@ -161,6 +162,7 @@ void ps2_spu2_key_on(u32 i, u32 ssa, u32 lsax, u32 pitch,
     v->pitch = pitch & 0x3FFFu;
     v->counter = 0;
     v->have = 0; v->idx = 0; v->s1 = 0; v->s2 = 0;
+    v->previous = 0;
     v->voll = voll; v->volr = volr;
     v->adsr1 = adsr1; v->adsr2 = adsr2;
     v->phase = ADSR_ATTACK; v->env = 0; v->env_clock = 0; v->on = 1;
@@ -232,15 +234,13 @@ void ps2_spu2_key_off_mask(u32 core0, u32 core1) {
 
 u32 ps2_spu2_endx(void) { return spu2_endx; }
 
-static void voice_sample(spu2_voice *v, u32 i, int *l, int *r) {
-    s16 s;
-    if (!v->on) return;
+static int voice_load(spu2_voice *v, u32 i) {
     if (!v->have) {
         u32 h;
         if (v->nax > SPU2_RAM_SIZE - 16u) {
             v->on = 0;
             spu2_end_stops++;
-            return;
+            return 0;
         }
         ps2_spu2_decode_block(ps2_spu2_ram + v->nax, v->buf, &v->s1, &v->s2,
                               &h);
@@ -253,16 +253,24 @@ static void voice_sample(spu2_voice *v, u32 i, int *l, int *r) {
             v->nax = (h & SPU2_LOOP_REP) ? v->lsax : 0xFFFFFFFFu;
         }
     }
-    s = v->buf[v->idx];
+    return 1;
+}
+
+static void voice_sample(spu2_voice *v, u32 i, int *l, int *r) {
+    int s;
+    if (!v->on || !voice_load(v, i)) return;
+    s = v->previous + (((int)v->buf[v->idx] - v->previous)
+                       * (int)v->counter >> 12);
     *l += ((s * v->env) >> 15) * v->voll >> 15;
     *r += ((s * v->env) >> 15) * v->volr >> 15;
     v->counter += v->pitch;
     while (v->counter >= 0x1000u) {
         v->counter -= 0x1000u;
+        if (!voice_load(v, i)) break;
+        v->previous = v->buf[v->idx];
         if (++v->idx >= 28) {
             v->idx = 0;
             v->have = 0;
-            break;
         }
     }
     adsr_step(v);
@@ -371,6 +379,27 @@ int ps2_spu2_selftest(void) {
     ps2_spu2_init();
     spu2_fail = 0;
     ps2_log("---- SPU2 self-test (SPU2_Overview_Manual.pdf p.15-16, p.20) ----");
+    {
+        spu2_voice v = {0};
+        int l = 0, r = 0;
+        memset(ps2_spu2_ram, 0, 64);
+        memset(ps2_spu2_ram + 2, 0x11, 14);
+        memset(ps2_spu2_ram + 18, 0x22, 14);
+        v.on = 1; v.pitch = 0x800; v.env = 32767;
+        v.voll = spu2_vol_decode(0x2000); v.volr = spu2_vol_decode(0x6000);
+        voice_sample(&v, 0, &l, &r);
+        spu2_expect("interpolation starts at zero history", l, 0);
+        voice_sample(&v, 0, &l, &r);
+        spu2_expect("half-sample interpolates instead of repeating", l, 1023);
+        spu2_expect("rear phase survives in opposite channel", r, -1024);
+        v = (spu2_voice){0}; v.on = 1; v.pitch = 0x3800;
+        for (int k = 0; k < 10; k++) voice_sample(&v, 0, &l, &r);
+        spu2_expect("high pitch consumes all steps across block", v.idx, 7);
+        spu2_expect("high pitch retains only fractional phase", v.counter, 0);
+        spu2_expect("high pitch loads next ADPCM block", v.nax, 32);
+        spu2_expect("interpolation history crosses block", v.previous, 8192);
+        memset(ps2_spu2_ram, 0, 64);
+    }
     {
         spu2_voice v = {0};
         v.phase = ADSR_ATTACK; v.adsr1 = 0x000f;

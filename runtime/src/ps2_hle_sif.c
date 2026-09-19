@@ -139,7 +139,7 @@ void hle_sceSifCallRpc(ps2_ctx *ctx) {
             ps2_log("rpc: call on unserviced id %08X fno=%u ssize=%d rsize=%d",
                     sid, fno, ssize, rsize);
         if (recv && rsize > 0)
-            for (s32 i = 0; i < rsize; i += 4) ps2_w32(recv + (u32)i, 0);
+            for (s32 i = 0; i < rsize; i++) ps2_w8(recv + (u32)i, 0);
         rc = 0;
     }
 
@@ -193,34 +193,67 @@ void hle_sceSifInitCmd(ps2_ctx *ctx)    { HRET(0); }
 void hle_sceSifExitCmd(ps2_ctx *ctx)    { HRET(0); }
 void hle_sceSifInitIopHeap(ps2_ctx *ctx){ HRET(0); }
 
-static u32 iop_heap_next = PS2_IOP_RAM_BASE + 0x00040000u;
+#define IOP_HEAP_START (PS2_IOP_RAM_BASE + 0x40000u)
+#define IOP_HEAP_PAGE 256u
+#define IOP_HEAP_COUNT ((PS2_IOP_RAM_SIZE - 0x40000u) / IOP_HEAP_PAGE)
+static u16 iop_heap[IOP_HEAP_COUNT];
+
+static u32 iop_alloc(u32 mode, u32 size, u32 address) {
+    if (!size || size > IOP_HEAP_COUNT * IOP_HEAP_PAGE || mode > 2u) return 0;
+    u32 count = (size + IOP_HEAP_PAGE - 1u) / IOP_HEAP_PAGE;
+    u32 first = 0, last = IOP_HEAP_COUNT - count;
+    if (mode == 2u) {
+        if (address < PS2_IOP_RAM_SIZE) address += PS2_IOP_RAM_BASE;
+        if (address < IOP_HEAP_START || address >= PS2_IOP_RAM_BASE + PS2_IOP_RAM_SIZE
+            || (address & (IOP_HEAP_PAGE - 1u))) return 0;
+        first = (address - IOP_HEAP_START) / IOP_HEAP_PAGE;
+        if (first > last) return 0;
+        last = first;
+    }
+    for (u32 step = 0; step <= last - first; step++) {
+        u32 start = mode == 1u ? last - step : first + step;
+        u32 j = 0;
+        while (j < count && !iop_heap[start + j]) j++;
+        if (j != count) continue;
+        iop_heap[start] = (u16)count;
+        for (j = 1; j < count; j++) iop_heap[start + j] = 0xffff;
+        return IOP_HEAP_START + start * IOP_HEAP_PAGE;
+    }
+    return 0;
+}
+
+static int iop_free(u32 address) {
+    if (address < PS2_IOP_RAM_SIZE) address += PS2_IOP_RAM_BASE;
+    if (address < IOP_HEAP_START || address >= PS2_IOP_RAM_BASE + PS2_IOP_RAM_SIZE
+        || (address & (IOP_HEAP_PAGE - 1u))) return -1;
+    u32 start = (address - IOP_HEAP_START) / IOP_HEAP_PAGE;
+    u32 count = iop_heap[start];
+    if (!count || count == 0xffff) return -1;
+    memset(iop_heap + start, 0, count * sizeof(iop_heap[0]));
+    return 0;
+}
 
 void hle_sceSifAllocIopHeap(ps2_ctx *ctx) {
-    u32 size = (ps2_arg(ctx, 0) + 63u) & ~63u;
-    u32 a = iop_heap_next;
-    if (iop_heap_next + size > PS2_IOP_RAM_BASE + PS2_IOP_RAM_SIZE) {
-        ps2_log("rpc: IOP heap exhausted (%u bytes requested)", size);
-        HRET(0);
-        return;
-    }
-    iop_heap_next += size;
-    HRET(a);
+    HRET(iop_alloc(0, ps2_arg(ctx, 0), 0));
 }
-void hle_sceSifFreeIopHeap(ps2_ctx *ctx) { HRET(0); }
-
+void hle_sceSifFreeIopHeap(ps2_ctx *ctx) { HRET(iop_free(ps2_arg(ctx, 0))); }
 void hle_sceSifAllocSysMemory(ps2_ctx *ctx) {
-    u32 size = (ps2_arg(ctx, 1) + 255u) & ~255u;
-    u32 a = iop_heap_next;
-    iop_heap_next += size;
-    HRET(a);
+    HRET(iop_alloc(ps2_arg(ctx, 0), ps2_arg(ctx, 1), ps2_arg(ctx, 2)));
 }
-void hle_sceSifFreeSysMemory(ps2_ctx *ctx) { HRET(0); }
-void hle_sceSifQueryMemSize(ps2_ctx *ctx)  { HRET(PS2_IOP_RAM_SIZE); }
+void hle_sceSifFreeSysMemory(ps2_ctx *ctx) { HRET(iop_free(ps2_arg(ctx, 0))); }
+void hle_sceSifQueryMemSize(ps2_ctx *ctx) { HRET(PS2_IOP_RAM_SIZE); }
 void hle_sceSifQueryMaxFreeMemSize(ps2_ctx *ctx) {
-    HRET(PS2_IOP_RAM_BASE + PS2_IOP_RAM_SIZE - iop_heap_next);
+    u32 run = 0, best = 0;
+    for (u32 i = 0; i < IOP_HEAP_COUNT; i++) {
+        run = iop_heap[i] ? 0 : run + 1;
+        if (run > best) best = run;
+    }
+    HRET(best * IOP_HEAP_PAGE);
 }
 void hle_sceSifQueryTotalFreeMemSize(ps2_ctx *ctx) {
-    HRET(PS2_IOP_RAM_BASE + PS2_IOP_RAM_SIZE - iop_heap_next);
+    u32 count = 0;
+    for (u32 i = 0; i < IOP_HEAP_COUNT; i++) count += !iop_heap[i];
+    HRET(count * IOP_HEAP_PAGE);
 }
 
 static int next_module_id = 3;
@@ -271,7 +304,7 @@ void ps2_sif_hle_init(void) {
     nservices = 0;
     nunknown = 0;
     bind_count = call_count = unknown_calls = 0;
-    iop_heap_next = PS2_IOP_RAM_BASE + 0x00040000u;
+    memset(iop_heap, 0, sizeof(iop_heap));
     next_module_id = 3;
 }
 

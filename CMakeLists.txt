@@ -53,6 +53,7 @@ set(RUNTIME_SOURCES
     runtime/src/ps2_audio.c
     runtime/src/ps2_sif.c
     runtime/src/ps2_vfs.c
+    runtime/src/ps2_hle_test.c
     runtime/src/ps2_hle_sif.c
     runtime/src/ps2_hle_cdvd.c
     runtime/src/ps2_hle_pad.c

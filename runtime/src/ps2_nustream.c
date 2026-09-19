@@ -15,6 +15,7 @@ typedef struct {
     u64 mixed, audible;
     int h1[2], h2[2];
     s16 pcm[2][28];
+    s16 previous_block[2];
 } nu_stream;
 static nu_stream streams[8];
 static SDL_SpinLock stream_lock;
@@ -94,7 +95,9 @@ int ps2_nustream_selftest(void) {
     memset(out, 0, sizeof out);
     ps2_nustream_mix(out, 56, volumes);
     ps2_nustream_status(0, &pos, &ended);
-    if (pos != 32 || ended || out[0] <= 0 || out[1] >= 0) fail++;
+    if (pos != 32 || ended || out[0] != 0 || out[1] != 0 ||
+        out[2] != 2047 || out[3] != -2048 ||
+        out[4] != 4095 || out[5] != -4096) fail++;
     s->paused = 1;
     ps2_nustream_mix(out, 30, volumes);
     ps2_nustream_status(0, &pos, &ended);
@@ -206,6 +209,7 @@ void ps2_nustream_mix(s16 *out, u32 frames, const s16 volumes[48][2]) {
             if (s->block != block) {
                 for (u32 ch = 0; ch < s->channels; ch++) {
                     u32 flags;
+                    s->previous_block[ch] = (s16)s->h1[ch];
                     ps2_spu2_decode_block(s->data + disk_offset(s, block * 16, ch),
                                          s->pcm[ch], &s->h1[ch], &s->h2[ch], &flags);
                 }
@@ -213,7 +217,10 @@ void ps2_nustream_mix(s16 *out, u32 frames, const s16 volumes[48][2]) {
             }
             int l = out[k*2], r = out[k*2+1];
             for (u32 ch = 0; ch < s->channels; ch++) if (s->voice[ch] < 48) {
-                int v = s->pcm[ch][sample % 28];
+                u32 idx = sample % 28;
+                int previous = idx ? s->pcm[ch][idx - 1] : s->previous_block[ch];
+                int v = previous + (((int)s->pcm[ch][idx] - previous)
+                                    * (int)(s->phase & 0xfff) >> 12);
                 l += v * volumes[s->voice[ch]][0] >> 15;
                 r += v * volumes[s->voice[ch]][1] >> 15;
             }

@@ -430,7 +430,7 @@ int main(int argc, char **argv) {
     const char *dir = ".";
     const char *disc = NULL;
     int want_video = 1, want_profile = 0, want_selftest = 0, want_vif_test = 0, want_vu_test = 0;
-    int want_gs_test = 0, want_spu2_test = 0;
+    int want_gs_test = 0, want_spu2_test = 0, want_hle_test = 0;
     int want_autoplay = 0, want_deint = 1;
     int want_stop_scene[3] = { -1, -1, 90 }, have_stop_scene = 0;
     int want_hidden = 0;
@@ -462,6 +462,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--selftest")) want_selftest = 1;
         else if (!strcmp(argv[i], "--gs-test")) want_gs_test = 1;
         else if (!strcmp(argv[i], "--spu2-test")) want_spu2_test = 1;
+        else if (!strcmp(argv[i], "--hle-test")) want_hle_test = 1;
         else if (!strcmp(argv[i], "--vif-test")) want_vif_test = 1;
         else if (!strcmp(argv[i], "--vu-test")) want_vu_test = 1;
         else if (!strcmp(argv[i], "--ipu-test") && i + 1 < argc)
@@ -504,7 +505,7 @@ int main(int argc, char **argv) {
             printf("usage: %s [--data DIR] [--disc ISO-or-DIR]\n"
                    "          [--vblanks N] [--watchdog N] [--seconds S]\n"
                    "          [--novideo] [--hidden] [--verbose] [--profile]\n"
-                   "          [--autoplay] [--selftest] [--gs-test]\n"
+                   "          [--autoplay] [--selftest] [--gs-test] [--hle-test] [--spu2-test]\n"
                    "          [--ipu-test FILE.ipu [--ipu-frames N]]\n"
                    "          [--no-deinterlace] [--stop-scene M.N[:frames]]\n"
                    "          [--capture FILE] [--capture-seconds S |"
@@ -582,6 +583,10 @@ int main(int argc, char **argv) {
     ps2_gs_init();
     ps2_vu1_init();
     if (want_gs_test) return ps2_gs_selftest();
+    if (want_hle_test) {
+        extern int ps2_hle_selftest(const char *disc);
+        return ps2_hle_selftest(disc);
+    }
     if (want_spu2_test) {
         extern int ps2_nustream_file_selftest(const char *disc);
         extern int ps2_nusound_packet_selftest(void);

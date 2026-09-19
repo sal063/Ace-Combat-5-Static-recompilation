@@ -159,7 +159,7 @@ void hle_sceCdDiskReady(ps2_ctx *ctx) {
     HRET(ps2_vfs_ready() ? SCECdComplete : SCECdNotReady);
 }
 
-void hle_sceCdGetDiskType(ps2_ctx *ctx) { HRET(SCECdPS2DVD); }
+void hle_sceCdGetDiskType(ps2_ctx *ctx) { HRET(ps2_vfs_ready() ? SCECdPS2DVD : 0); }
 
 void hle_sceCdMmode(ps2_ctx *ctx) { cd_media = (int)ps2_arg(ctx, 0); HRET(1); }
 
@@ -211,10 +211,19 @@ static int cdvd_rpc(ps2_ctx *ctx, u32 fno, u32 send, int ssize,
                     u32 recv, int rsize) {
     (void)send; (void)ssize;
     if (recv && rsize > 0)
-        for (int i = 0; i < rsize; i += 4) ps2_w32(recv + (u32)i, 0);
+        for (int i = 0; i < rsize; i++) ps2_w8(recv + (u32)i, 0);
     if (recv && rsize >= 4) ps2_w32(recv, 1);
     ps2_log("cdvd: RPC fno=%u served generically (%d/%d bytes)",
             fno, ssize, rsize);
+    return 0;
+}
+
+static int cdvd_scmd_rpc(ps2_ctx *ctx, u32 fno, u32 send, int ssize,
+                         u32 recv, int rsize) {
+    if (fno != 3u) return cdvd_rpc(ctx, fno, send, ssize, recv, rsize);
+    if (!recv || rsize < 4) return -1;
+    for (int i = 0; i < rsize; i++) ps2_w8(recv + (u32)i, 0);
+    ps2_w32(recv, ps2_vfs_ready() ? SCECdPS2DVD : 0);
     return 0;
 }
 
@@ -223,7 +232,7 @@ static int cdvd_ready_rpc(ps2_ctx *ctx, u32 fno, u32 send, int ssize,
     (void)ctx; (void)fno; (void)send; (void)ssize;
     if (recv && rsize > 0) {
         int i;
-        for (i = 0; i < rsize; i += 4) ps2_w32(recv + (u32)i, 0);
+        for (i = 0; i < rsize; i++) ps2_w8(recv + (u32)i, 0);
     }
     if (recv && rsize >= 4)
         ps2_w32(recv, ps2_vfs_ready() ? SCECdComplete : SCECdNotReady);
@@ -232,7 +241,7 @@ static int cdvd_ready_rpc(ps2_ctx *ctx, u32 fno, u32 send, int ssize,
 
 void ps2_cdvd_rpc_register(void) {
     ps2_rpc_register(0x80000592u, cdvd_rpc, "cdvd-scmd");
-    ps2_rpc_register(0x80000593u, cdvd_rpc, "cdvd-scmd2");
+    ps2_rpc_register(0x80000593u, cdvd_scmd_rpc, "cdvd-scmd2");
     ps2_rpc_register(0x80000595u, cdvd_rpc, "cdvd-ncmd");
     ps2_rpc_register(0x80000597u, cdvd_rpc, "cdvd-srch");
     ps2_rpc_register(0x8000059Au, cdvd_rpc, "cdvd-init");
