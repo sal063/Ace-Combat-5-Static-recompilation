@@ -1114,10 +1114,24 @@ static int create_swapchain(void) {
     }
     if (swap_extent.width == 0 || swap_extent.height == 0) return 1;
 
-    VKCHK(vkGetPhysicalDeviceSurfaceFormatsKHR(phys, surface, &nf, fmts));
-    swap_format = fmts[0].format;
-    for (u32 i = 0; i < nf; i++)
+    /* Mesa on Wayland lists well over 64 formats (one per HDR colour space),
+       so a short array gets VK_INCOMPLETE. That still fills it, which is all
+       we need; only the SRGB_NONLINEAR entries are usable here anyway. */
+    {
+        VkResult r = vkGetPhysicalDeviceSurfaceFormatsKHR(phys, surface, &nf, fmts);
+        if (r != VK_SUCCESS && r != VK_INCOMPLETE) {
+            ps2_log("vk: vkGetPhysicalDeviceSurfaceFormatsKHR failed (%d)", (int)r);
+            return -1;
+        }
+    }
+    if (nf == 0) return -1;
+    swap_format = VK_FORMAT_UNDEFINED;
+    for (u32 i = 0; i < nf; i++) {
+        if (fmts[i].colorSpace != VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) continue;
+        if (swap_format == VK_FORMAT_UNDEFINED) swap_format = fmts[i].format;
         if (fmts[i].format == VK_FORMAT_B8G8R8A8_UNORM) { swap_format = fmts[i].format; break; }
+    }
+    if (swap_format == VK_FORMAT_UNDEFINED) swap_format = fmts[0].format;
 
     memset(&ci, 0, sizeof(ci));
     ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
