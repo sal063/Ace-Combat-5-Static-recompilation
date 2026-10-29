@@ -1,5 +1,6 @@
 #include "ps2_capture.h"
 #include "ps2_hle.h"
+#include "ps2_gfxq.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -417,6 +418,7 @@ static void cap_index_push(u32 field) {
 }
 
 int ps2_cap_active(void) { return g_cap_recording; }
+int ps2_cap_wanted(void) { return g_cap_recording || g_req_pending; }
 
 void ps2_cap_configure(const char *path, int frames, int level) {
     if (path && *path) snprintf(g_cfg_path, sizeof g_cfg_path, "%s", path);
@@ -614,12 +616,7 @@ void ps2_cap_maybe_start(void) {
         g_armed_fired = 1;
         ps2_cap_request_ex(g_cfg_path, g_cfg_frames, g_cfg_level);
     }
-    if (g_req_pending) {
-        snprintf(g_path, sizeof g_path, "%s", g_reqpath);
-        frames = g_reqframes;
-        level = g_reqlevel;
-        g_req_pending = 0;
-    } else {
+    if (!g_req_pending) {
         FILE *mk = fopen("capture.on", "rb");
         char buf[64];
         int marked = 0;
@@ -638,8 +635,13 @@ void ps2_cap_maybe_start(void) {
         remove("capture.on");
         if (!marked && frames == 1) frames = 2;
         ps2_mkdir_p("out");
-        snprintf(g_path, sizeof g_path, "%s", g_cfg_path);
+        ps2_cap_request_ex(g_cfg_path, frames, level);
     }
+    if (ps2_gfxq_blocks_capture()) return;
+    snprintf(g_path, sizeof g_path, "%s", g_reqpath);
+    frames = g_reqframes;
+    level = g_reqlevel;
+    g_req_pending = 0;
 
     {   const char *slash = strrchr(g_path, '/');
         if (slash && slash - g_path < 400) {

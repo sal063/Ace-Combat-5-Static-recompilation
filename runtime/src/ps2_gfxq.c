@@ -1,5 +1,6 @@
 #include "ps2_gfxq.h"
 #include "rn.h"
+#include "ps2_capture.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,7 +38,7 @@ static u8 *q_buf;
 static size_t q_cap;
 static size_t q_head, q_tail;
 static int q_busy;
-static int q_running;
+static int q_running, q_paused;
 static pthread_t q_thread;
 static _Thread_local int q_is_worker;
 static pthread_mutex_t q_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -322,6 +323,8 @@ void ps2_gfxq_shutdown(void) {
     pthread_mutex_unlock(&q_lock);
     pthread_join(q_thread, NULL);
     ps2_gfxq_on = 0;
+    free(q_buf);
+    q_buf = NULL;
 }
 
 int ps2_gfxq_blocks_capture(void) { return ps2_gfxq_on; }
@@ -406,6 +409,15 @@ void ps2_gfxq_gs_priv(u32 addr, u64 val) {
 }
 
 int ps2_gfxq_field(void) {
+    if (ps2_gfxq_on && ps2_cap_wanted()) {
+        ps2_log("gfxq: a capture is starting -- the graphics machine runs on the EE "
+                "thread until it stops");
+        ps2_gfxq_shutdown();
+        q_paused = 1;
+    } else if (q_paused && !ps2_cap_wanted()) {
+        q_paused = 0;
+        ps2_gfxq_init();
+    }
     if (!ps2_gfxq_on) {
         u64 start = ps2_speed_enabled() ? gq_now_ns() : 0;
         int result = ps2_gs_present_now();

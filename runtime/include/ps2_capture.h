@@ -121,6 +121,7 @@ void ps2_cap_request_ex(const char *path, int frames, int level);
 void ps2_cap_toggle(void);
 void ps2_cap_stop(const char *why);
 int  ps2_cap_active(void);
+int  ps2_cap_wanted(void);
 void ps2_cap_configure(const char *path, int frames, int level);
 void ps2_cap_arm_at(u32 field);
 void ps2_cap_report(void);
