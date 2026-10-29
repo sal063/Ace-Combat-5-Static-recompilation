@@ -3438,6 +3438,25 @@ static void vk_vertex(ps2_vk_vertex *o, const gs_vtx *v, int iip,
     o->round_uv = 0;
 }
 
+static void zfill(ps2_vk_state *st, ps2_vk_vertex *v, int n) {
+    int z32 = st->fb_psm == PSM_Z32, zs;
+    if (st->tme || st->abe || (st->ate && st->atst != 1u)
+        || (z32 ? st->fb_mask != 0
+                : st->fb_psm != PSM_Z24 || (st->fb_mask & 0xFFFFFFu)))
+        return;
+    zs = rt_find_z(fb_base());
+    if (zs < 0) return;
+    st->zte = 1;
+    st->ztst = 1u;
+    st->zwrite = 1;
+    st->zrt = (u32)zs;
+    for (int i = 0; i < n; i++) {
+        u32 z = (u32)v[i].r | (u32)v[i].g << 8 | (u32)v[i].b << 16
+              | (z32 ? (u32)v[i].a << 24 : 0u);
+        v[i].z = (float)((double)z / (z32 ? 4294967295.0 : 16777215.0));
+    }
+}
+
 static u32 sprite_round_axis(s32 p0, s32 p1, u32 t0, u32 t1) {
     s32 dp = p1 - p0, dt = (s32)t1 - (s32)t0;
     u32 a = (u32)abs(dp), b = (u32)abs(dt), span = a;
@@ -3766,6 +3785,7 @@ static void vk_sprite(const gs_vtx *a, const gs_vtx *b) {
     t[0] = q[0]; t[1] = q[1]; t[2] = q[2];
     t[3] = q[0]; t[4] = q[2]; t[5] = q[3];
     for (i = 0; i < 6; i++) t[i].round_uv = PS2_VK_RUV_SPRITE;
+    zfill(&st, t, 6);
     if (st.tme && st.fst && st.tex_point && !st.shuffle_rg
         && !st.tex_rt && !st.tex_lod) {
         u32 ru = sprite_round_axis(a->x, b->x, a->u, b->u);
