@@ -17,6 +17,10 @@ enum {
 #define PS2_ACT_BUTTONS 16
 #define PS2_BIND_SLOTS  2
 
+#define PS2_KEY_MOUSE 512
+enum { PS2_MOUSE_WHEEL_UP = 6, PS2_MOUSE_WHEEL_DOWN, PS2_MOUSE_CODES };
+#define PS2_KEY_CODES (PS2_KEY_MOUSE + PS2_MOUSE_CODES)
+
 #define PS2_PADBIND_AXIS          0x100
 #define PS2_PADBIND_BUTTON(b)     ((int)(b) + 1)
 #define PS2_PADBIND_AXISDIR(a, p) (PS2_PADBIND_AXIS | ((int)(a) << 1) | ((p) ? 1 : 0))
@@ -67,6 +71,9 @@ typedef struct ps2_settings {
     float axis_scale;
     float button_deadzone;
     int   invert[2];
+    int   mouse_enabled, mouse_roll, mouse_invert_y;
+    float mouse_sens, mouse_look_sens;
+    int   mouse_look[PS2_BIND_SLOTS];
 } ps2_settings;
 
 extern ps2_settings ps2_cfg;
@@ -96,8 +103,8 @@ void ps2_settings_apply_game_patches(void);
 
 float ps2_pad_axis_value(int raw, int positive);
 float ps2_pad_past_deadzone(float f);
-void  ps2_pad_stick(float deadzone, float axis_scale, int invert, const float v[4],
-                    unsigned char *x, unsigned char *y);
+void  ps2_pad_stick(float deadzone, float axis_scale, int invert, const float pad[4],
+                    const float other[4], unsigned char *x, unsigned char *y);
 int   ps2_pad_trigger(float button_deadzone, float value, unsigned char *pressure);
 int   ps2_pad_button(float button_deadzone, float value);
 

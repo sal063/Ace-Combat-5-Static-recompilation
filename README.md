@@ -149,6 +149,8 @@ Keyboard defaults:
 
 You can rebind all of it in the settings menu.
 
+The mouse can fly too: tick Fly with the mouse under Keyboard & mouse in the settings menu, where mouse buttons and the wheel also bind like keys. Opening the menu gives the cursor back.
+
 Other keys:
 
 - **F4** opens and closes the settings menu
