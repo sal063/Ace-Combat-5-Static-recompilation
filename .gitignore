@@ -28,7 +28,9 @@ __pycache__/
 *.PAC
 *.pac
 tests/mods/**/*.dll
-saves/mods/
+SLUS_208.51
+*.iso
+saves/
 tests/mods/mount_test/
 tests/mods/archive_test/
 tests/mods/bgm_test/
