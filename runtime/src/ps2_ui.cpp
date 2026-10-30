@@ -692,6 +692,14 @@ void tab_controller() {
         ps2_cfg.block_input_in_menu = block;
         changed(0);
     }
+    bool latch = ps2_cfg.square_latch != 0;
+    if (ImGui::Checkbox("Square latches", &latch)) {
+        ps2_cfg.square_latch = latch;
+        changed(0);
+    }
+    help("Ace Combat 5 zooms the map by how hard Square is pressed. With this on, each press, "
+         "from a key or a controller, steps Square: held at half pressure, held fully, "
+         "released. Shown in the top-right corner.");
     ImGui::TextWrapped("Click a binding, then press a button, or push a stick or trigger in the "
                        "direction you want. Esc cancels; Backspace or a right-click clears it.");
     if (ImGui::Button("Reset controller to defaults")) {
@@ -803,16 +811,27 @@ void tab_analog() {
     }
 }
 
+const ImGuiWindowFlags OVERLAY = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize
+                               | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing
+                               | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove;
+
 void draw_fps() {
     ImGuiIO &io = ImGui::GetIO();
     ImGui::SetNextWindowPos(ImVec2(10.0f * g_dpi, 10.0f * g_dpi), ImGuiCond_Always);
     ImGui::SetNextWindowBgAlpha(0.45f);
-    const ImGuiWindowFlags f = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize
-                             | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing
-                             | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove;
-    if (ImGui::Begin("##fps", nullptr, f))
+    if (ImGui::Begin("##fps", nullptr, OVERLAY))
         ImGui::Text("%.0f FPS  %.1f ms", (double)io.Framerate,
                     io.Framerate > 0.0f ? 1000.0 / (double)io.Framerate : 0.0);
+    ImGui::End();
+}
+
+void draw_square() {
+    ImGuiIO &io = ImGui::GetIO();
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - 10.0f * g_dpi, 10.0f * g_dpi),
+                            ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+    ImGui::SetNextWindowBgAlpha(0.45f);
+    if (ImGui::Begin("##square", nullptr, OVERLAY))
+        ImGui::TextUnformatted(ps2_video_square_step() == 1 ? "Square: half" : "Square: full");
     ImGui::End();
 }
 
@@ -961,7 +980,8 @@ int ps2_ui_event(const SDL_Event *e) {
 }
 
 void ps2_ui_draw(VkCommandBuffer cmd) {
-    if (!g_init || (!g_visible && !ps2_cfg.show_fps)) return;
+    int square = ps2_video_square_step();
+    if (!g_init || (!g_visible && !ps2_cfg.show_fps && !square)) return;
     ImGuiIO &io = ImGui::GetIO();
     if (g_cap == CAP_PAD) io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableGamepad;
     else io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
@@ -972,6 +992,7 @@ void ps2_ui_draw(VkCommandBuffer cmd) {
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
     if (ps2_cfg.show_fps) draw_fps();
+    if (square) draw_square();
     if (g_visible) {
         draw_menu();
         draw_capture_popup();

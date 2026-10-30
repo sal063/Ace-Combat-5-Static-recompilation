@@ -51,6 +51,7 @@ typedef struct ps2_pad_state {
     u16 buttons;
     u8 lx, ly, rx, ry;
     u8 l2, r2;
+    u8 sq;
 } ps2_pad_state;
 extern ps2_pad_state ps2_pad_host[PS2_PAD_PORTS];
 

@@ -4134,6 +4134,22 @@ void ps2_video_select_gamepad(SDL_JoystickID id) {
     ps2_log("pad: %s selected", SDL_GetGamepadName(gamepad));
 }
 
+static int square_step, square_was_down;
+
+int ps2_video_square_step(void) { return square_step; }
+
+static void latch_square(ps2_pad_state *st) {
+    int down = (st->buttons >> PS2_ACT_SQUARE) & 1, edge = down && !square_was_down;
+    square_was_down = down;
+    if (!ps2_cfg.square_latch) { square_step = 0; return; }
+    if (edge) square_step = (square_step + 1) % 3;
+    st->buttons &= (u16)~(1u << PS2_ACT_SQUARE);
+    if (square_step) {
+        st->buttons |= (u16)(1u << PS2_ACT_SQUARE);
+        st->sq = square_step == 1 ? 128 : 255;
+    }
+}
+
 static void poll_input(void) {
     const bool *keys = window_hidden ? NULL : SDL_GetKeyboardState(NULL);
     ps2_pad_state st;
@@ -4144,7 +4160,11 @@ static void poll_input(void) {
     memset(&st, 0, sizeof(st));
     st.connected = 1;
     st.lx = st.ly = st.rx = st.ry = PS2_PAD_ANALOG_NEUTRAL;
-    if (ps2_ui_blocks_game_input()) { ps2_pad_publish(0, &st); return; }
+    if (ps2_ui_blocks_game_input()) {
+        square_step = square_was_down = 0;
+        ps2_pad_publish(0, &st);
+        return;
+    }
 
     for (int act = 0; act < PS2_ACT_COUNT; act++) {
         float v = 0.0f;
@@ -4171,6 +4191,7 @@ static void poll_input(void) {
             held = ps2_pad_button(ps2_cfg.button_deadzone, value[act]);
         if (held) st.buttons |= (u16)(1u << act);
     }
+    latch_square(&st);
     if (env >= 0) dz = (float)env / 32767.0f;
     ps2_pad_stick(dz, ps2_cfg.axis_scale, ps2_cfg.invert[0], value + PS2_ACT_LS_UP,
                   &st.lx, &st.ly);

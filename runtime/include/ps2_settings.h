@@ -61,6 +61,7 @@ typedef struct ps2_settings {
     int   show_fps;
     float ui_scale;
     int   block_input_in_menu;
+    int   square_latch;
     int   key[PS2_ACT_COUNT][PS2_BIND_SLOTS];
     int   pad[PS2_ACT_COUNT][PS2_BIND_SLOTS];
     float deadzone;

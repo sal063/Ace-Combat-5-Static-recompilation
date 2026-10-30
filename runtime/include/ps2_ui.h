@@ -41,6 +41,7 @@ typedef struct {
 } ps2_render_info;
 
 SDL_Gamepad *ps2_video_gamepad(void);
+int ps2_video_square_step(void);
 void ps2_video_select_gamepad(SDL_JoystickID id);
 void ps2_video_render_info(ps2_render_info *out);
 
