@@ -17,6 +17,7 @@ extern "C" void ps2_log(const char *fmt, ...);
 namespace {
 
 bool g_init, g_visible;
+bool g_quit_ask;
 SDL_Window *g_window;
 float g_max_aniso;
 float g_dpi = 1.0f;
@@ -854,6 +855,57 @@ void draw_menu() {
     if (!open) ps2_ui_set_visible(0);
 }
 
+bool shown() { return g_visible || g_quit_ask; }
+
+void shown_changed() {
+    ImGuiIO &io = ImGui::GetIO();
+    io.ClearEventsQueue();
+    io.ClearInputKeys();
+    if (shown()) {
+        io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
+        SDL_ShowCursor();
+    } else {
+        io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
+    }
+}
+
+void set_quit_ask(bool on) {
+    if (on == g_quit_ask) return;
+    g_quit_ask = on;
+    shown_changed();
+}
+
+void quit() {
+    SDL_Event e = {};
+    e.type = SDL_EVENT_QUIT;
+    SDL_PushEvent(&e);
+}
+
+void draw_quit_prompt() {
+    const char *id = "Quit the game?###quit";
+    bool open = ImGui::IsPopupOpen(id);
+    if (!g_quit_ask && !open) return;
+    if (g_quit_ask && !open) ImGui::OpenPopup(id);
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Always,
+                            ImVec2(0.5f, 0.5f));
+    if (!ImGui::BeginPopupModal(id, nullptr, ImGuiWindowFlags_AlwaysAutoResize
+                                | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings))
+        return;
+    if (!g_quit_ask) {
+        ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+        return;
+    }
+    ImGui::TextUnformatted("Progress since your last save is lost.");
+    ImGui::TextDisabled("Enter quits, Esc cancels.");
+    ImGui::Spacing();
+    if (ImGui::Button("Quit", ImVec2(ImGui::GetFontSize() * 7.0f, 0.0f))) quit();
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(ImGui::GetFontSize() * 7.0f, 0.0f))) set_quit_ask(false);
+    ImGui::SetItemDefaultFocus();
+    ImGui::EndPopup();
+}
+
 }
 
 int ps2_ui_init(const ps2_ui_init_info *info) {
@@ -917,6 +969,7 @@ void ps2_ui_shutdown(void) {
     ImGui::DestroyContext();
     g_init = false;
     g_visible = false;
+    g_quit_ask = false;
 }
 
 int ps2_ui_visible(void) { return g_init && g_visible; }
@@ -924,20 +977,13 @@ int ps2_ui_visible(void) { return g_init && g_visible; }
 void ps2_ui_set_visible(int on) {
     if (!g_init || (on != 0) == g_visible) return;
     g_visible = on != 0;
-    ImGuiIO &io = ImGui::GetIO();
-    io.ClearEventsQueue();
-    io.ClearInputKeys();
+    g_quit_ask = false;
     g_cap = CAP_NONE;
-    if (g_visible) {
-        io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
-        SDL_ShowCursor();
-    } else {
-        io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
-    }
+    shown_changed();
 }
 
 int ps2_ui_blocks_game_input(void) {
-    return g_init && g_visible && ps2_cfg.block_input_in_menu;
+    return g_init && (g_quit_ask || (g_visible && ps2_cfg.block_input_in_menu));
 }
 
 int ps2_ui_event(const SDL_Event *e) {
@@ -947,13 +993,24 @@ int ps2_ui_event(const SDL_Event *e) {
         return 1;
     }
     if (g_cap != CAP_NONE && capture_event(e)) return 1;
-    if (!g_visible) {
+    bool key = e->type == SDL_EVENT_KEY_DOWN, fresh = key && !e->key.repeat;
+    if (!shown()) {
+        if (fresh && e->key.key == SDLK_ESCAPE) {
+            set_quit_ask(true);
+            return 1;
+        }
         if (e->type == SDL_EVENT_GAMEPAD_ADDED || e->type == SDL_EVENT_GAMEPAD_REMOVED)
             ImGui_ImplSDL3_ProcessEvent(e);
         return 0;
     }
-    if (e->type == SDL_EVENT_KEY_DOWN && e->key.key == SDLK_ESCAPE) {
-        ps2_ui_set_visible(0);
+    if (key && e->key.key == SDLK_ESCAPE) {
+        if (!g_quit_ask) ps2_ui_set_visible(0);
+        else if (fresh) set_quit_ask(false);
+        return 1;
+    }
+    if (g_quit_ask && fresh && !(e->key.mod & SDL_KMOD_ALT)
+        && (e->key.key == SDLK_RETURN || e->key.key == SDLK_KP_ENTER)) {
+        quit();
         return 1;
     }
     ImGui_ImplSDL3_ProcessEvent(e);
@@ -961,7 +1018,7 @@ int ps2_ui_event(const SDL_Event *e) {
 }
 
 void ps2_ui_draw(VkCommandBuffer cmd) {
-    if (!g_init || (!g_visible && !ps2_cfg.show_fps)) return;
+    if (!g_init || (!shown() && !ps2_cfg.show_fps)) return;
     ImGuiIO &io = ImGui::GetIO();
     if (g_cap == CAP_PAD) io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableGamepad;
     else io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
@@ -976,6 +1033,7 @@ void ps2_ui_draw(VkCommandBuffer cmd) {
         draw_menu();
         draw_capture_popup();
     }
+    if (shown()) draw_quit_prompt();
     ImGui::Render();
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
 }

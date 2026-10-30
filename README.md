@@ -153,7 +153,7 @@ Other keys:
 
 - **F4** opens and closes the settings menu
 - **F11** or **Alt+Enter** toggles fullscreen
-- **Esc** quits, or closes the settings menu if it's open
+- **Esc** asks before quitting (Enter quits), or closes the settings menu if it's open
 - **F6 to F10** are debugging hotkeys (captures and state dumps), you can ignore them
 
 ## Mods
@@ -187,7 +187,7 @@ The PS2's VU1 runs small vector programs that the game uploads to it while it's 
    .\build\gcc\ac5.exe --data generated --disc "C:\path\to\game.iso" --watchdog 0
    ```
 
-   Get through the menus and into a mission, because some of the programs only get uploaded once you're actually flying. A short run that never leaves the menus only records the menu programs. Quit with Esc when you're done, and on the way out it writes `out\vu_programs\` (a `manifest.json` plus a `.bin` for each program).
+   Get through the menus and into a mission, because some of the programs only get uploaded once you're actually flying. A short run that never leaves the menus only records the menu programs. Quit with Esc and Enter when you're done, and on the way out it writes `out\vu_programs\` (a `manifest.json` plus a `.bin` for each program).
 
 2. Turn them into C. `PYTHONPATH` still needs to point at `tools` for this:
 
