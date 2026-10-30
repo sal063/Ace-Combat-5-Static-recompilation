@@ -128,7 +128,7 @@ If you start `ac5.exe` from anywhere other than that terminal (double-clicking i
 
 Where your stuff goes:
 
-- Saves are written to a `saves` folder inside whatever folder you started the game from. The memory card files get created the first time the game touches them. Set `PS2_SAVE_DIR` if you want them somewhere else. These are this runtime's own format, not PCSX2 memory cards, so you can't bring saves over from an emulator.
+- Saves are written to a `saves` folder inside whatever folder you started the game from. The memory card files get created the first time the game touches them. Set `PS2_SAVE_DIR` if you want them somewhere else. These are this runtime's own format, not PCSX2 memory cards. To bring a PCSX2 save over, run `python tools/import_pcsx2_save.py path\to\Mcd001.ps2 saves\card0.ps2mc`. It backs up the old card first.
 - Settings are saved to `ac5_settings.ini` next to `ac5.exe`.
 - Compiled graphics pipelines are cached in `ac5_pipelines.cache` and `ac5_pipelines.keys` next to `ac5.exe`, so a state that was compiled once doesn't cause a stutter the next time it shows up. Deleting them is harmless, they just get rebuilt.
 
