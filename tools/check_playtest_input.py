@@ -22,6 +22,8 @@ assert 'seek64(image_fp, n->image_off + pos)' in iso
 print('ISO offsets stay 64-bit at seek call sites: PASS')
 assert 'cached = PAD_PATH_LIBPAD2;' in s
 assert 'if (buf) ps2_w8(buf, 3);' in s
+assert 'd[14] = (buttons >> PAD_L1) & 1 ? ((st->buttons >> PAD_L1) & 1 ? st->l1 : 255) : 0;' in s
+assert 'd[15] = (buttons >> PAD_R1) & 1 ? ((st->buttons >> PAD_R1) & 1 ? st->r1 : 255) : 0;' in s
 assert 'd[16] = (buttons >> PAD_L2) & 1 ? ((st->buttons >> PAD_L2) & 1 ? st->l2 : 255) : 0;' in s
 assert 'd[17] = (buttons >> PAD_R2) & 1 ? ((st->buttons >> PAD_R2) & 1 ? st->r2 : 255) : 0;' in s
 def c_to_py(e):
@@ -38,10 +40,11 @@ for source in ('host','script'):
         buttons=sum(1<<bit for j,bit in enumerate(physical.values()) if combination & (1<<j))
         host=buttons if source=='host' else 0
         values={**physical,'buttons':buttons,'host':host,
+                'l1':255 if host>>10&1 else 0,'r1':255 if host>>11&1 else 0,
                 'l2':255 if host>>8&1 else 0,'r2':255 if host>>9&1 else 0}
         decoded=[eval(assign[i],{},values) for i in (14,15,16,17)]
         assert decoded==[255 if combination & (1<<j) else 0 for j in range(4)],(source,combination,decoded)
-partial={**physical,'buttons':1<<8,'host':1<<8,'l2':100,'r2':0}
-assert eval(assign[16],{},partial)==100 and eval(assign[17],{},partial)==0
+partial={**physical,'buttons':1<<8|1<<10,'host':1<<8|1<<10,'l1':60,'r1':0,'l2':100,'r2':0}
+assert [eval(assign[i],{},partial) for i in (14,15,16,17)]==[60,0,100,0]
 print('Standard pad capabilities, map selection, 16 simultaneous shoulder combinations '
-      'from host and script, and analogue trigger pressure: PASS')
+      'from host and script, and analogue shoulder pressure: PASS')

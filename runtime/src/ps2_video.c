@@ -4162,13 +4162,10 @@ static void poll_input(void) {
         value[act] = v;
     }
     for (int act = 0; act < PS2_ACT_BUTTONS; act++) {
-        int held;
-        if (act == PS2_ACT_L2)
-            held = ps2_pad_trigger(ps2_cfg.button_deadzone, value[act], &st.l2);
-        else if (act == PS2_ACT_R2)
-            held = ps2_pad_trigger(ps2_cfg.button_deadzone, value[act], &st.r2);
-        else
-            held = ps2_pad_button(ps2_cfg.button_deadzone, value[act]);
+        unsigned char *p = act == PS2_ACT_L1 ? &st.l1 : act == PS2_ACT_R1 ? &st.r1
+                         : act == PS2_ACT_L2 ? &st.l2 : act == PS2_ACT_R2 ? &st.r2 : NULL;
+        int held = p ? ps2_pad_trigger(ps2_cfg.button_deadzone, value[act], p)
+                     : ps2_pad_button(ps2_cfg.button_deadzone, value[act]);
         if (held) st.buttons |= (u16)(1u << act);
     }
     if (env >= 0) dz = (float)env / 32767.0f;

@@ -136,6 +136,8 @@ Where your stuff goes:
 
 Controllers go through SDL, so anything SDL recognizes as a gamepad should just work. Buttons map by position: the bottom face button is Cross, right is Circle, left is Square, top is Triangle. Bumpers are L1/R1, triggers are L2/R2, clicking the sticks gives L3/R3, and Back and Start are Select and Start.
 
+L1, R1, L2 and R2 all keep a trigger's analog travel. To throttle with the triggers and yaw with the bumpers, like newer Ace Combat games, bind the triggers to L1/R1 and the bumpers to L2/R2.
+
 Keyboard defaults:
 
 | PS2 | Keyboard |
