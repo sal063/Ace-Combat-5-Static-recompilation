@@ -149,6 +149,8 @@ Keyboard defaults:
 
 You can rebind all of it in the settings menu.
 
+The mouse can fly too. Tick Fly with the mouse under Keyboard & mouse in the settings menu: mouse left and right roll, or yaw if you pick that there, and mouse up and down pitch, mouse up being nose down unless you tick Invert up/down. The controls follow how fast the mouse moves and centre as soon as it stops. A binding held there makes the mouse steer the right stick instead, by how far it moves, which centres again when it is let go. Flight sensitivity and Look sensitivity set each one apart. Mouse buttons and the wheel bind like keys, though nothing is bound to them by default. Opening the menu gives the cursor back.
+
 Other keys:
 
 - **F4** opens and closes the settings menu

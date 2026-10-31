@@ -123,6 +123,9 @@ int main(void) {
     CHECK(ps2_cfg.deadzone == 0.0f && ps2_cfg.axis_scale == 1.33f && ps2_cfg.button_deadzone == 0.0f
           && ps2_cfg.invert[0] == 0 && ps2_cfg.invert[1] == 0,
           "analog defaults are not PCSX2's (PadTypes.h:102-106)");
+    CHECK(ps2_cfg.mouse_enabled == 0 && ps2_cfg.mouse_roll == 1 && ps2_cfg.mouse_invert_y == 0
+          && ps2_cfg.mouse_sens == 1.0f && ps2_cfg.mouse_look_sens == 1.0f
+          && ps2_cfg.mouse_look[0] == 0 && ps2_cfg.mouse_look[1] == 0, "the mouse is on by default");
 
     {
         ps2_settings a;
@@ -136,6 +139,10 @@ int main(void) {
         a.pad[PS2_ACT_R2][1] = PS2_PADBIND_BUTTON(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
         a.deadzone = 0.15f; a.axis_scale = 1.4f; a.button_deadzone = 0.2f;
         a.invert[0] = 2; a.invert[1] = 3;
+        a.key[PS2_ACT_L1][1] = PS2_KEY_MOUSE + PS2_MOUSE_WHEEL_UP;
+        a.mouse_look[0] = SDL_SCANCODE_LALT; a.mouse_look[1] = PS2_KEY_MOUSE + SDL_BUTTON_MIDDLE;
+        a.mouse_enabled = 1; a.mouse_roll = 0; a.mouse_invert_y = 1; a.mouse_sens = 2.5f;
+        a.mouse_look_sens = 0.5f;
         a.internal_res = 0;
         a.preset = ps2_settings_preset_matches(&a);
         ps2_cfg = a;
@@ -156,12 +163,16 @@ int main(void) {
               "bindings did not round-trip");
         CHECK(feq(b->deadzone, 0.15f) && feq(b->axis_scale, 1.4f) && feq(b->button_deadzone, 0.2f)
               && b->invert[0] == 2 && b->invert[1] == 3, "analog fields did not round-trip");
+        CHECK(b->mouse_enabled == 1 && b->mouse_roll == 0 && b->mouse_invert_y == 1 && feq(b->mouse_sens, 2.5f)
+              && feq(b->mouse_look_sens, 0.5f) && !memcmp(b->mouse_look, a.mouse_look, sizeof a.mouse_look),
+              "mouse fields did not round-trip");
     }
 
     {
         FILE *f = fopen(ps2_settings_path(), "w");
         fprintf(f, "[graphics]\nanisotropy = 7\npreset = 3\n[display]\nwindow_width = 10\naspect = 99\n"
                    "[analog]\ndeadzone = 5\naxis_scale = -4\nbutton_deadzone = -1\ninvert_left = 9\n"
+                   "[mouse]\nenabled = 7\nroll = 3\ninvert_y = 5\nsensitivity = 99\nlook_sensitivity = 0\n"
                    "[keyboard]\ncross = 999999 -3\n");
         fclose(f);
         ps2_settings_load();
@@ -171,8 +182,20 @@ int main(void) {
         CHECK(feq(ps2_cfg.deadzone, 1.0f) && feq(ps2_cfg.axis_scale, 0.01f)
               && ps2_cfg.button_deadzone == 0.0f && ps2_cfg.invert[0] == 3,
               "hand-edited analog values were not clamped to PCSX2's ranges");
+        CHECK(ps2_cfg.mouse_enabled == 1 && ps2_cfg.mouse_roll == 1 && ps2_cfg.mouse_invert_y == 1
+              && feq(ps2_cfg.mouse_sens, 3.0f) && feq(ps2_cfg.mouse_look_sens, 0.1f),
+              "hand-edited mouse values were not clamped");
         CHECK(ps2_cfg.preset == PS2_PRESET_LOW, "a preset name that the fields contradict was kept (%d)",
               ps2_cfg.preset);
+        f = fopen(ps2_settings_path(), "w");
+        fprintf(f, "[keyboard]\ncross = 516 519\nmouse_look = 513 44\n");
+        fclose(f);
+        ps2_settings_load();
+        CHECK(ps2_cfg.key[PS2_ACT_CROSS][0] == PS2_KEY_MOUSE + SDL_BUTTON_X1
+              && ps2_cfg.key[PS2_ACT_CROSS][1] == PS2_KEY_MOUSE + PS2_MOUSE_WHEEL_DOWN
+              && ps2_cfg.mouse_look[0] == PS2_KEY_MOUSE + SDL_BUTTON_LEFT
+              && ps2_cfg.mouse_look[1] == SDL_SCANCODE_SPACE,
+              "hand-written mouse bindings were not read");
         f = fopen(ps2_settings_path(), "w");
         fprintf(f, "[graphics]\ninternal_resolution = 99\n");
         fclose(f);

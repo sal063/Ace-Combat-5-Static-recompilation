@@ -45,9 +45,17 @@ const char *ps2_action_name(int act) {
     return act >= 0 && act < PS2_ACT_COUNT ? act_names[act] : "?";
 }
 
+_Static_assert(PS2_KEY_MOUSE == SDL_SCANCODE_COUNT, "mouse key codes follow the scancodes");
+
 const char *ps2_key_name(int scancode) {
+    static const char *const mouse[PS2_MOUSE_CODES] = {
+        "-", "Mouse left", "Mouse middle", "Mouse right", "Mouse 4", "Mouse 5",
+        "Wheel up", "Wheel down",
+    };
     const char *n;
     if (scancode <= 0) return "-";
+    if (scancode >= PS2_KEY_MOUSE)
+        return scancode < PS2_KEY_CODES ? mouse[scancode - PS2_KEY_MOUSE] : "-";
     n = SDL_GetScancodeName((SDL_Scancode)scancode);
     return n && *n ? n : "Unknown key";
 }
@@ -97,6 +105,7 @@ void ps2_settings_default_bindings(ps2_settings *s, int keyboard, int pad) {
         s->key[PS2_ACT_LS_DOWN][0]  = SDL_SCANCODE_KP_2;
         s->key[PS2_ACT_LS_LEFT][0]  = SDL_SCANCODE_KP_4;
         s->key[PS2_ACT_LS_RIGHT][0] = SDL_SCANCODE_KP_6;
+        memset(s->mouse_look, 0, sizeof s->mouse_look);
     }
     if (pad) {
         memset(s->pad, 0, sizeof s->pad);
@@ -187,6 +196,9 @@ void ps2_settings_defaults(ps2_settings *s) {
     s->deadzone = 0.0f;
     s->axis_scale = 1.33f;
     s->button_deadzone = 0.0f;
+    s->mouse_roll = 1;
+    s->mouse_sens = 1.0f;
+    s->mouse_look_sens = 1.0f;
 }
 
 static float clampf(float v, float lo, float hi) {
@@ -229,14 +241,21 @@ static void sanitize(ps2_settings *s) {
     s->block_input_in_menu = s->block_input_in_menu != 0;
     for (int a = 0; a < PS2_ACT_COUNT; a++)
         for (int k = 0; k < PS2_BIND_SLOTS; k++) {
-            if (s->key[a][k] < 0 || s->key[a][k] >= SDL_SCANCODE_COUNT) s->key[a][k] = 0;
+            if (s->key[a][k] < 0 || s->key[a][k] >= PS2_KEY_CODES) s->key[a][k] = 0;
             if (s->pad[a][k] < 0 || s->pad[a][k] > 0x1FF) s->pad[a][k] = 0;
         }
+    for (int k = 0; k < PS2_BIND_SLOTS; k++)
+        if (s->mouse_look[k] < 0 || s->mouse_look[k] >= PS2_KEY_CODES) s->mouse_look[k] = 0;
     s->deadzone = clampf(s->deadzone, 0.0f, 1.0f);
     s->axis_scale = clampf(s->axis_scale, 0.01f, 2.0f);
     s->button_deadzone = clampf(s->button_deadzone, 0.0f, 1.0f);
     s->invert[0] = clampi(s->invert[0], 0, 3);
     s->invert[1] = clampi(s->invert[1], 0, 3);
+    s->mouse_enabled = s->mouse_enabled != 0;
+    s->mouse_roll = s->mouse_roll != 0;
+    s->mouse_invert_y = s->mouse_invert_y != 0;
+    s->mouse_sens = clampf(s->mouse_sens, 0.1f, 3.0f);
+    s->mouse_look_sens = clampf(s->mouse_look_sens, 0.1f, 3.0f);
 }
 
 typedef struct {
@@ -284,6 +303,11 @@ static const cfg_field fields[] = {
     FF("analog", "button_deadzone", button_deadzone, "PCSX2 Button/Trigger Deadzone, 0..1"),
     FI("analog", "invert_left", invert[0], "0 none, 1 left/right, 2 up/down, 3 both"),
     FI("analog", "invert_right", invert[1], "0 none, 1 left/right, 2 up/down, 3 both"),
+    FI("mouse", "enabled", mouse_enabled, "1 on"),
+    FI("mouse", "roll", mouse_roll, "left/right: 0 yaw (L2/R2), 1 roll (left stick)"),
+    FI("mouse", "invert_y", mouse_invert_y, "0 mouse up = nose down, 1 mouse up = nose up"),
+    FF("mouse", "sensitivity", mouse_sens, "0.1..3; at 1, 3000 counts a second fly all the way"),
+    FF("mouse", "look_sensitivity", mouse_look_sens, "0.1..3; at 1, each count turns the view 0.1 degree"),
 };
 
 void ps2_settings_disable_file(void) {
@@ -349,13 +373,17 @@ void ps2_settings_load(void) {
         key = trim(p);
         val = trim(eq + 1);
         if (!strcmp(section, "keyboard") || !strcmp(section, "controller")) {
-            int act, a = 0, b = 0;
+            int act, a = 0, b = 0, *slot;
             for (act = 0; act < PS2_ACT_COUNT; act++)
                 if (!strcmp(key, act_keys[act])) break;
-            if (act == PS2_ACT_COUNT) continue;
-            if (sscanf(val, "%d %d", &a, &b) < 1) continue;
-            if (section[0] == 'k') { ps2_cfg.key[act][0] = a; ps2_cfg.key[act][1] = b; }
-            else                   { ps2_cfg.pad[act][0] = a; ps2_cfg.pad[act][1] = b; }
+            if (section[0] == 'k')
+                slot = act < PS2_ACT_COUNT ? ps2_cfg.key[act]
+                     : !strcmp(key, "mouse_look") ? ps2_cfg.mouse_look : NULL;
+            else
+                slot = act < PS2_ACT_COUNT ? ps2_cfg.pad[act] : NULL;
+            if (!slot || sscanf(val, "%d %d", &a, &b) < 1) continue;
+            slot[0] = a;
+            slot[1] = b;
             continue;
         }
         if (!strcmp(section, "analog")) {
@@ -409,11 +437,15 @@ void ps2_settings_save(void) {
         if (fd->comment[0]) fprintf(f, "%-26s = %-10s ; %s\n", fd->key, val, fd->comment);
         else fprintf(f, "%-26s = %s\n", fd->key, val);
     }
-    fprintf(f, "\n[keyboard]\n; action = primary secondary, as SDL scancodes (0 = unbound)\n");
+    fprintf(f, "\n[keyboard]\n; action = primary secondary, as SDL scancodes, or 512 + 1..5 for "
+               "mouse buttons, 518/519 wheel up/down (0 = unbound)\n");
     for (int a = 0; a < PS2_ACT_COUNT; a++)
         fprintf(f, "%-26s = %3d %3d    ; %s, %s\n", act_keys[a], ps2_cfg.key[a][0],
                 ps2_cfg.key[a][1], ps2_key_name(ps2_cfg.key[a][0]),
                 ps2_key_name(ps2_cfg.key[a][1]));
+    fprintf(f, "%-26s = %3d %3d    ; %s, %s (held: the mouse steers the right stick)\n",
+            "mouse_look", ps2_cfg.mouse_look[0], ps2_cfg.mouse_look[1],
+            ps2_key_name(ps2_cfg.mouse_look[0]), ps2_key_name(ps2_cfg.mouse_look[1]));
     fprintf(f, "\n[controller]\n; action = primary secondary: 1 + SDL button, or 256 | axis << 1 | positive\n");
     for (int a = 0; a < PS2_ACT_COUNT; a++)
         fprintf(f, "%-26s = %3d %3d    ; %s, %s\n", act_keys[a], ps2_cfg.pad[a][0],

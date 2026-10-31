@@ -4134,6 +4134,97 @@ void ps2_video_select_gamepad(SDL_JoystickID id) {
     ps2_log("pad: %s selected", SDL_GetGamepadName(gamepad));
 }
 
+#define MOUSE_WHEEL_NS 100000000ull
+#define MOUSE_LOOK_DEG 0.1f
+#define MOUSE_LOOK_YAW 180.0f
+#define MOUSE_LOOK_PITCH 90.0f
+#define MOUSE_SPEED_FULL 3000.0f
+#define MOUSE_SPEED_NS 16666667ull
+#define MOUSE_SPEED_SAMPLES 64
+
+static int mouse_captured, mouse_skip, mouse_wait_release, mouse_hist_at;
+static float mouse_fly[2], mouse_look[2], mouse_hist_d[MOUSE_SPEED_SAMPLES][2];
+static Uint64 mouse_wheel_until[2], mouse_hist_ns[MOUSE_SPEED_SAMPLES];
+
+static void mouse_capture(int want) {
+    if (want == mouse_captured) return;
+    if (!SDL_SetWindowRelativeMouseMode(window, want)) {
+        static int said;
+        if (!said++) ps2_log("pad: cannot capture the mouse: %s", SDL_GetError());
+        return;
+    }
+    mouse_captured = want;
+    mouse_skip = 1;
+    mouse_wait_release = 1;
+    mouse_wheel_until[0] = mouse_wheel_until[1] = 0;
+    mouse_fly[0] = mouse_fly[1] = mouse_look[0] = mouse_look[1] = 0.0f;
+    memset(mouse_hist_ns, 0, sizeof(mouse_hist_ns));
+}
+
+static int mouse_bound(void) {
+    for (int act = 0; act < PS2_ACT_COUNT; act++)
+        for (int k = 0; k < PS2_BIND_SLOTS; k++)
+            if (ps2_cfg.key[act][k] > PS2_KEY_MOUSE) return 1;
+    return ps2_cfg.mouse_look[0] > 0 || ps2_cfg.mouse_look[1] > 0;
+}
+
+static int bind_held(const bool *keys, int code, SDL_MouseButtonFlags b, Uint64 now) {
+    int m = code - PS2_KEY_MOUSE;
+    if (m >= PS2_MOUSE_WHEEL_UP) return now < mouse_wheel_until[m - PS2_MOUSE_WHEEL_UP];
+    if (m > 0) return (b & SDL_BUTTON_MASK(m)) != 0;
+    return keys && code > 0 && keys[code];
+}
+
+static float mouse_move(float p, float d, float full) {
+    return fmaxf(-1.0f, fminf(1.0f, p + d * ps2_cfg.mouse_look_sens * MOUSE_LOOK_DEG / full));
+}
+
+static void mouse_speed(const float *d, Uint64 now) {
+    float sum[2] = { 0.0f, 0.0f };
+    mouse_hist_at = (mouse_hist_at + 1) % MOUSE_SPEED_SAMPLES;
+    mouse_hist_ns[mouse_hist_at] = now;
+    memcpy(mouse_hist_d[mouse_hist_at], d, sizeof(mouse_hist_d[0]));
+    for (int k = 0; k < MOUSE_SPEED_SAMPLES; k++)
+        if (now - mouse_hist_ns[k] < MOUSE_SPEED_NS) {
+            sum[0] += mouse_hist_d[k][0];
+            sum[1] += mouse_hist_d[k][1];
+        }
+    for (int i = 0; i < 2; i++)
+        mouse_fly[i] = fmaxf(-1.0f, fminf(1.0f, sum[i] * 1e9f / MOUSE_SPEED_NS
+                                                * ps2_cfg.mouse_sens / MOUSE_SPEED_FULL));
+}
+
+static void mouse_push(float *value, int neg, float v) {
+    float *p = &value[v < 0.0f ? neg : neg + 1];
+    if (fabsf(v) > *p) *p = fabsf(v);
+}
+
+static void mouse_input(const bool *keys, float *value) {
+    float d[2] = { 0.0f, 0.0f }, still[2] = { 0.0f, 0.0f };
+    Uint64 now = SDL_GetTicksNS();
+    SDL_MouseButtonFlags b = SDL_GetRelativeMouseState(&d[0], &d[1]);
+    int look;
+
+    if (mouse_skip) { mouse_skip = 0; d[0] = d[1] = 0.0f; }
+    if (mouse_wait_release) {
+        if (!b) mouse_wait_release = 0;
+        b = 0;
+    }
+    look = bind_held(keys, ps2_cfg.mouse_look[0], b, now)
+        || bind_held(keys, ps2_cfg.mouse_look[1], b, now);
+    mouse_speed(look || !ps2_cfg.mouse_enabled ? still : d, now);
+    for (int i = 0; i < 2; i++)
+        mouse_look[i] = look ? mouse_move(mouse_look[i], d[i], i ? MOUSE_LOOK_PITCH : MOUSE_LOOK_YAW) : 0.0f;
+    mouse_push(value, ps2_cfg.mouse_roll ? PS2_ACT_LS_LEFT : PS2_ACT_L2, mouse_fly[0]);
+    mouse_push(value, PS2_ACT_LS_UP, ps2_cfg.mouse_invert_y ? -mouse_fly[1] : mouse_fly[1]);
+    mouse_push(value, PS2_ACT_RS_LEFT, mouse_look[0]);
+    mouse_push(value, PS2_ACT_RS_UP, mouse_look[1]);
+    for (int act = 0; act < PS2_ACT_COUNT; act++)
+        for (int k = 0; k < PS2_BIND_SLOTS; k++)
+            if (ps2_cfg.key[act][k] > PS2_KEY_MOUSE && bind_held(keys, ps2_cfg.key[act][k], b, now))
+                value[act] = 1.0f;
+}
+
 static void poll_input(void) {
     const bool *keys = window_hidden ? NULL : SDL_GetKeyboardState(NULL);
     ps2_pad_state st;
@@ -4141,9 +4232,12 @@ static void poll_input(void) {
     float value[PS2_ACT_COUNT];
     float dz = ps2_cfg.deadzone;
     int env = pad_deadzone_env();
+    int focused = !window_hidden && (SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS);
     memset(&st, 0, sizeof(st));
     st.connected = 1;
     st.lx = st.ly = st.rx = st.ry = PS2_PAD_ANALOG_NEUTRAL;
+    mouse_capture(focused && !ps2_ui_visible() && !ps2_ui_blocks_game_input()
+                  && (ps2_cfg.mouse_enabled || mouse_bound()));
     if (ps2_ui_blocks_game_input()) { ps2_pad_publish(0, &st); return; }
 
     for (int act = 0; act < PS2_ACT_COUNT; act++) {
@@ -4161,6 +4255,7 @@ static void poll_input(void) {
         }
         value[act] = v;
     }
+    if (mouse_captured) mouse_input(keys, value);
     for (int act = 0; act < PS2_ACT_BUTTONS; act++) {
         int held;
         if (act == PS2_ACT_L2)
@@ -4489,6 +4584,12 @@ static void pump_events(void) {
             break;
         case SDL_EVENT_GAMEPAD_REMOVED:
             if (gamepad) { SDL_CloseGamepad(gamepad); gamepad = NULL; }
+            break;
+        case SDL_EVENT_MOUSE_WHEEL:
+            if (mouse_captured && e.wheel.y != 0.0f) {
+                int down = (e.wheel.y < 0.0f) != (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED);
+                mouse_wheel_until[down] = SDL_GetTicksNS() + MOUSE_WHEEL_NS;
+            }
             break;
         case SDL_EVENT_KEY_DOWN:
             if (e.key.key == SDLK_ESCAPE && !window_hidden) window_closed = 1;
