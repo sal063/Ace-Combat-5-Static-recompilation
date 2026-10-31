@@ -39,6 +39,7 @@ typedef struct {
     u8 lx, ly;
     int lxInvert, lyInvert;
     float axisScale, axisDeadzone;
+    int diagonal;
 } ref_pad;
 
 static float ref_clamp(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -49,6 +50,16 @@ static void ref_set(ref_pad *p, int index, float value) {
     p->lx = p->lxInvert ? MERGE(REF_LEFT, REF_RIGHT) : MERGE(REF_RIGHT, REF_LEFT);
     p->ly = p->lyInvert ? MERGE(REF_UP, REF_DOWN) : MERGE(REF_DOWN, REF_UP);
 #undef MERGE
+    if (p->diagonal) {
+        const float normalizedX = (p->lx - 127.5) / 127.5f;
+        const float normalizedY = (p->ly - 127.5) / 127.5f;
+        const float magnitude = sqrtf(normalizedX * normalizedX + normalizedY * normalizedY);
+        const float max = fmaxf(fabsf(normalizedX), fabsf(normalizedY));
+        const float scaledX = (normalizedX / max) * fminf(magnitude, 1.0f);
+        const float scaledY = (normalizedY / max) * fminf(magnitude, 1.0f);
+        p->lx = (u8)((scaledX * 127.5) + 127.5);
+        p->ly = (u8)((scaledY * 127.5) + 127.5);
+    }
     const float dz = p->axisDeadzone;
     if (dz > 0.0f) {
 #define MERGE_F(pos, neg) ((p->rawInputs[pos] != 0) ? ((float)p->rawInputs[pos] / 255.0f) : ((float)p->rawInputs[neg] / -255.0f))
@@ -72,10 +83,10 @@ static void ref_axis_event(ref_pad *p, int y_axis, int raw) {
     ref_set(p, y_axis ? REF_UP : REF_LEFT, ref_clamp(value < 0.0f ? -value : 0.0f, 0.0f, 1.0f));
 }
 
-static void our_stick(float dz, float scale, int invert, int x, int y, u8 *ox, u8 *oy) {
+static void our_stick(float dz, float scale, int diagonal, int invert, int x, int y, u8 *ox, u8 *oy) {
     const float v[4] = { ps2_pad_axis_value(y, 0), ps2_pad_axis_value(y, 1),
                          ps2_pad_axis_value(x, 0), ps2_pad_axis_value(x, 1) };
-    ps2_pad_stick(dz, scale, invert, v, ox, oy);
+    ps2_pad_stick(dz, 0.0f, scale, diagonal, invert, v, ox, oy);
 }
 
 int main(void) {
@@ -121,8 +132,8 @@ int main(void) {
           && ps2_cfg.pad[PS2_ACT_LS_LEFT][0] == PS2_PADBIND_AXISDIR(SDL_GAMEPAD_AXIS_LEFTX, 0),
           "default controller map");
     CHECK(ps2_cfg.deadzone == 0.0f && ps2_cfg.axis_scale == 1.33f && ps2_cfg.button_deadzone == 0.0f
-          && ps2_cfg.invert[0] == 0 && ps2_cfg.invert[1] == 0,
-          "analog defaults are not PCSX2's (PadTypes.h:102-106)");
+          && ps2_cfg.invert[0] == 0 && ps2_cfg.invert[1] == 0 && ps2_cfg.anti_deadzone == 0.0f
+          && ps2_cfg.diagonal == 0, "analog defaults are not PCSX2's (PadTypes.h:102-106)");
 
     {
         ps2_settings a;
@@ -135,7 +146,7 @@ int main(void) {
         a.key[PS2_ACT_CROSS][1] = SDL_SCANCODE_SPACE;
         a.pad[PS2_ACT_R2][1] = PS2_PADBIND_BUTTON(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
         a.deadzone = 0.15f; a.axis_scale = 1.4f; a.button_deadzone = 0.2f;
-        a.invert[0] = 2; a.invert[1] = 3;
+        a.invert[0] = 2; a.invert[1] = 3; a.anti_deadzone = 0.3f; a.diagonal = 1;
         a.internal_res = 0;
         a.preset = ps2_settings_preset_matches(&a);
         ps2_cfg = a;
@@ -155,13 +166,15 @@ int main(void) {
         CHECK(!memcmp(b->key, a.key, sizeof a.key) && !memcmp(b->pad, a.pad, sizeof a.pad),
               "bindings did not round-trip");
         CHECK(feq(b->deadzone, 0.15f) && feq(b->axis_scale, 1.4f) && feq(b->button_deadzone, 0.2f)
-              && b->invert[0] == 2 && b->invert[1] == 3, "analog fields did not round-trip");
+              && b->invert[0] == 2 && b->invert[1] == 3 && feq(b->anti_deadzone, 0.3f) && b->diagonal == 1,
+              "analog fields did not round-trip");
     }
 
     {
         FILE *f = fopen(ps2_settings_path(), "w");
         fprintf(f, "[graphics]\nanisotropy = 7\npreset = 3\n[display]\nwindow_width = 10\naspect = 99\n"
                    "[analog]\ndeadzone = 5\naxis_scale = -4\nbutton_deadzone = -1\ninvert_left = 9\n"
+                   "anti_deadzone = 3\ndiagonal_correction = 4\n"
                    "[keyboard]\ncross = 999999 -3\n");
         fclose(f);
         ps2_settings_load();
@@ -169,7 +182,8 @@ int main(void) {
               && ps2_cfg.key[PS2_ACT_CROSS][0] == 0 && ps2_cfg.key[PS2_ACT_CROSS][1] == 0,
               "hand-edited values were not clamped");
         CHECK(feq(ps2_cfg.deadzone, 1.0f) && feq(ps2_cfg.axis_scale, 0.01f)
-              && ps2_cfg.button_deadzone == 0.0f && ps2_cfg.invert[0] == 3,
+              && ps2_cfg.button_deadzone == 0.0f && ps2_cfg.invert[0] == 3
+              && feq(ps2_cfg.anti_deadzone, 0.9f) && ps2_cfg.diagonal == 1,
               "hand-edited analog values were not clamped to PCSX2's ranges");
         CHECK(ps2_cfg.preset == PS2_PRESET_LOW, "a preset name that the fields contradict was kept (%d)",
               ps2_cfg.preset);
@@ -202,35 +216,39 @@ int main(void) {
     {
         static const float dzs[] = { 0.0f, 0.1f, 0.25f, 0.5f, 1.0f };
         static const float scales[] = { 0.5f, 1.0f, 1.33f, 2.0f };
-        long compared = 0, differ = 0, order = 0;
+        long compared = 0, differ = 0, order = 0, rest = 0;
+        for (int dg = 0; dg < 2; dg++)
         for (size_t a = 0; a < sizeof dzs / sizeof dzs[0]; a++)
         for (size_t b = 0; b < sizeof scales / sizeof scales[0]; b++)
         for (int inv = 0; inv < 4; inv++)
         for (int i = 0; i < 256; i++)
         for (int j = 0; j < 256; j++) {
             int x = -32768 + i * 257, y = -32768 + j * 257;
-            ref_pad r = { {0}, 127, 127, inv & 1, (inv & 2) != 0, scales[b], dzs[a] };
+            ref_pad r = { {0}, 127, 127, inv & 1, (inv & 2) != 0, scales[b], dzs[a], dg };
             u8 ox, oy;
             ref_axis_event(&r, 0, x);
             ref_axis_event(&r, 1, y);
-            our_stick(dzs[a], scales[b], inv, x, y, &ox, &oy);
+            our_stick(dzs[a], scales[b], dg, inv, x, y, &ox, &oy);
             compared++;
-            if (ox != r.lx || oy != r.ly) {
+            if (dg && ox == 127 && oy == 127 && r.lx == 126 && r.ly == 126) {
+                rest++;
+            } else if (ox != r.lx || oy != r.ly) {
                 if (!differ)
-                    printf("first difference: dead zone %.2f scale %.2f invert %d at (%d, %d): "
-                           "PCSX2 %u,%u, ours %u,%u\n", (double)dzs[a], (double)scales[b], inv,
-                           x, y, r.lx, r.ly, ox, oy);
+                    printf("first difference: correction %d dead zone %.2f scale %.2f invert %d at "
+                           "(%d, %d): PCSX2 %u,%u, ours %u,%u\n", dg, (double)dzs[a],
+                           (double)scales[b], inv, x, y, r.lx, r.ly, ox, oy);
                 differ++;
             }
             if ((i + j) % 17 == 0) {
-                ref_pad q = { {0}, 127, 127, inv & 1, (inv & 2) != 0, scales[b], dzs[a] };
+                ref_pad q = { {0}, 127, 127, inv & 1, (inv & 2) != 0, scales[b], dzs[a], dg };
                 ref_axis_event(&q, 1, y);
                 ref_axis_event(&q, 0, x);
                 if (q.lx != r.lx || q.ly != r.ly) order++;
             }
         }
         printf("stick: %ld positions and settings compared with PCSX2, %ld differ, "
-               "%ld depend on event order\n", compared, differ, order);
+               "%ld depend on event order, %ld centred kept at 127 where PCSX2's correction "
+               "reads 126\n", compared, differ, order, rest);
         CHECK(differ == 0, "the stick model differs from PCSX2's");
         CHECK(order == 0, "PCSX2's result depended on event order");
     }
@@ -240,30 +258,57 @@ int main(void) {
         CHECK(ps2_pad_axis_value(-32768, 0) == 1.0f && ps2_pad_axis_value(32767, 1) == 1.0f
               && ps2_pad_axis_value(-1, 1) == 0.0f && ps2_pad_axis_value(16384, 0) == 0.0f,
               "axis values");
-        our_stick(0.0f, 1.33f, 0, 0, 0, &x, &y);
+        our_stick(0.0f, 1.33f, 0, 0, 0, 0, &x, &y);
         CHECK(x == 127 && y == 127, "centre is not 0x7F (%u, %u)", x, y);
-        our_stick(0.0f, 1.33f, 0, 32767, 32767, &x, &y);
+        our_stick(0.0f, 1.33f, 0, 0, 32767, 32767, &x, &y);
         CHECK(x == 255 && y == 255, "right and down (%u, %u)", x, y);
-        our_stick(0.0f, 1.33f, 0, -32768, -32768, &x, &y);
+        our_stick(0.0f, 1.33f, 0, 0, -32768, -32768, &x, &y);
         CHECK(x == 0 && y == 0, "left and up (%u, %u)", x, y);
-        our_stick(0.0f, 1.33f, 0, 16384, 0, &x, &y);
+        our_stick(0.0f, 1.33f, 0, 0, 16384, 0, &x, &y);
         CHECK(x == 212 && y == 127, "half right at 133%% (%u)", x);
-        our_stick(0.0f, 1.33f, 0, 24700, 0, &x, &y);
+        our_stick(0.0f, 1.33f, 0, 0, 24700, 0, &x, &y);
         CHECK(x == 255, "133%% does not saturate by 75.4%% of travel (%u)", x);
-        our_stick(0.25f, 1.0f, 0, 6553, 0, &x, &y);
+        our_stick(0.25f, 1.0f, 0, 0, 6553, 0, &x, &y);
         CHECK(x == 127 && y == 127, "20%% inside a 25%% dead zone (%u)", x);
-        our_stick(0.25f, 1.0f, 0, 9830, 0, &x, &y);
+        our_stick(0.25f, 1.0f, 0, 0, 9830, 0, &x, &y);
         CHECK(x == 165, "30%% outside a 25%% dead zone is not passed on unscaled (%u)", x);
-        our_stick(0.25f, 1.0f, 0, 6553, 6553, &x, &y);
+        our_stick(0.25f, 1.0f, 0, 0, 6553, 6553, &x, &y);
         CHECK(x == 152 && y == 152, "the dead zone is not radial (%u, %u)", x, y);
-        our_stick(0.0f, 1.33f, 1, 32767, 32767, &x, &y);
+        our_stick(0.0f, 1.33f, 0, 1, 32767, 32767, &x, &y);
         CHECK(x == 0 && y == 255, "invert left/right (%u, %u)", x, y);
-        our_stick(0.0f, 1.33f, 2, 32767, 32767, &x, &y);
+        our_stick(0.0f, 1.33f, 0, 2, 32767, 32767, &x, &y);
         CHECK(x == 255 && y == 0, "invert up/down (%u, %u)", x, y);
         {
             const float both[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-            ps2_pad_stick(0.0f, 1.33f, 0, both, &x, &y);
+            ps2_pad_stick(0.0f, 0.0f, 1.33f, 0, 0, both, &x, &y);
             CHECK(x == 255 && y == 255, "opposing directions (%u, %u)", x, y);
+        }
+        {
+            const float centre[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const float tiny[4] = { 0.0f, 0.0f, 0.0f, 0.02f };
+            const float half[4] = { 0.0f, 0.0f, 0.0f, 0.5f };
+            const float full[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+            const float diag[4] = { 0.0f, 0.02f, 0.0f, 0.1f };
+            ps2_pad_stick(0.0f, 0.5f, 1.0f, 0, 0, centre, &x, &y);
+            CHECK(x == 127 && y == 127, "anti-dead zone moved a centred stick (%u, %u)", x, y);
+            ps2_pad_stick(0.0f, 0.5f, 1.0f, 0, 0, tiny, &x, &y);
+            CHECK(x >= 191 && y == 127, "2%% right did not start at the anti-dead zone (%u, %u)", x, y);
+            ps2_pad_stick(0.0f, 0.5f, 1.0f, 0, 0, half, &x, &y);
+            CHECK(x == 223 && y == 127, "half right with a 50%% anti-dead zone (%u)", x);
+            ps2_pad_stick(0.0f, 0.5f, 1.0f, 0, 0, full, &x, &y);
+            CHECK(x == 255 && y == 127, "anti-dead zone changed full deflection (%u)", x);
+            ps2_pad_stick(0.0f, 0.5f, 1.0f, 0, 0, diag, &x, &y);
+            CHECK(y >= 191 && y < x, "anti-dead zone is not square (%u, %u)", x, y);
+            ps2_pad_stick(0.25f, 0.5f, 1.0f, 0, 0, tiny, &x, &y);
+            CHECK(x == 127 && y == 127, "anti-dead zone pushed a stick out of the dead zone (%u)", x);
+        }
+        {
+            const float centre[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const float diag[4] = { 0.0f, 0.7071f, 0.0f, 0.7071f };
+            ps2_pad_stick(0.0f, 0.0f, 1.0f, 1, 0, diag, &x, &y);
+            CHECK(x >= 253 && y >= 253, "diagonal correction did not reach the corner (%u, %u)", x, y);
+            ps2_pad_stick(0.0f, 0.0f, 1.0f, 1, 0, centre, &x, &y);
+            CHECK(x == 127 && y == 127, "diagonal correction moved a centred stick (%u, %u)", x, y);
         }
 
         CHECK(ps2_pad_trigger(0.0f, 0.5f, &p) == 1 && p == 127, "half trigger (%u)", p);

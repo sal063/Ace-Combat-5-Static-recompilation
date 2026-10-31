@@ -185,6 +185,7 @@ void ps2_settings_defaults(ps2_settings *s) {
     s->block_input_in_menu = 1;
     ps2_settings_default_bindings(s, 1, 1);
     s->deadzone = 0.0f;
+    s->anti_deadzone = 0.0f;
     s->axis_scale = 1.33f;
     s->button_deadzone = 0.0f;
 }
@@ -234,7 +235,9 @@ static void sanitize(ps2_settings *s) {
         }
     s->deadzone = clampf(s->deadzone, 0.0f, 1.0f);
     s->axis_scale = clampf(s->axis_scale, 0.01f, 2.0f);
+    s->anti_deadzone = clampf(s->anti_deadzone, 0.0f, 0.9f);
     s->button_deadzone = clampf(s->button_deadzone, 0.0f, 1.0f);
+    s->diagonal = s->diagonal != 0;
     s->invert[0] = clampi(s->invert[0], 0, 3);
     s->invert[1] = clampi(s->invert[1], 0, 3);
 }
@@ -280,7 +283,9 @@ static const cfg_field fields[] = {
     FF("display", "menu_scale", ui_scale, "0.5..3"),
     FI("input", "block_game_input_in_menu", block_input_in_menu, "1 on"),
     FF("analog", "deadzone", deadzone, "PCSX2 Analog Deadzone, both sticks, 0..1"),
+    FF("analog", "anti_deadzone", anti_deadzone, "minimum travel of each moved stick axis, both sticks, 0..0.9, 0 off"),
     FF("analog", "axis_scale", axis_scale, "PCSX2 Analog Sensitivity, 0.01..2 (default 1.33)"),
+    FI("analog", "diagonal_correction", diagonal, "PCSX2 Use Diagonal Scale Correction, 1 on"),
     FF("analog", "button_deadzone", button_deadzone, "PCSX2 Button/Trigger Deadzone, 0..1"),
     FI("analog", "invert_left", invert[0], "0 none, 1 left/right, 2 up/down, 3 both"),
     FI("analog", "invert_right", invert[1], "0 none, 1 left/right, 2 up/down, 3 both"),
@@ -459,8 +464,31 @@ float ps2_pad_axis_value(int raw, int positive) {
     return clampf(positive ? v : -v, 0.0f, 1.0f);
 }
 
-void ps2_pad_stick(float deadzone, float axis_scale, int invert, const float v[4],
-                   unsigned char *x, unsigned char *y) {
+static unsigned char stick_byte(float f) {
+    float b = f < 0.0f ? 127.0f + f * 127.0f : 127.0f + f * 128.0f;
+    return (unsigned char)clampf(b + 0.5f, 0.0f, 255.0f);
+}
+
+static float stick_float(unsigned char b) {
+    return b < 127 ? -(127 - b) / 127.0f : (b - 127) / 128.0f;
+}
+
+static void stick_diagonal(unsigned char *x, unsigned char *y) {
+    float nx = (float)((*x - 127.5) / 127.5f), ny = (float)((*y - 127.5) / 127.5f);
+    float mag = fminf(sqrtf(nx * nx + ny * ny), 1.0f), m = fmaxf(fabsf(nx), fabsf(ny));
+    if (*x == 127 && *y == 127) return;
+    *x = (unsigned char)(nx / m * mag * 127.5 + 127.5);
+    *y = (unsigned char)(ny / m * mag * 127.5 + 127.5);
+}
+
+static unsigned char axis_anti_deadzone(float anti, unsigned char b) {
+    float f = stick_float(b);
+    if (anti <= 0.0f || b == 127) return b;
+    return stick_byte(copysignf(anti + (1.0f - anti) * fabsf(f), f));
+}
+
+void ps2_pad_stick(float deadzone, float anti_deadzone, float axis_scale, int diagonal,
+                   int invert, const float v[4], unsigned char *x, unsigned char *y) {
     unsigned raw[4], px, nx, py, ny;
     for (int i = 0; i < 4; i++)
         raw[i] = (unsigned char)clampf(v[i] * axis_scale * 255.0f, 0.0f, 255.0f);
@@ -472,6 +500,7 @@ void ps2_pad_stick(float deadzone, float axis_scale, int invert, const float v[4
     *x = (unsigned char)MERGE(px, nx);
     *y = (unsigned char)MERGE(py, ny);
 #undef MERGE
+    if (diagonal) stick_diagonal(x, y);
     if (deadzone > 0.0f) {
         float fx = px != 0 ? (float)px / 255.0f : (float)nx / -255.0f;
         float fy = py != 0 ? (float)py / 255.0f : (float)ny / -255.0f;
@@ -483,6 +512,8 @@ void ps2_pad_stick(float deadzone, float axis_scale, int invert, const float v[4
             if (in_x && in_y) *x = *y = 127;
         }
     }
+    *x = axis_anti_deadzone(anti_deadzone, *x);
+    *y = axis_anti_deadzone(anti_deadzone, *y);
 }
 
 int ps2_pad_trigger(float button_deadzone, float value, unsigned char *pressure) {

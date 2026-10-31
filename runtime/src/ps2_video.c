@@ -4172,10 +4172,10 @@ static void poll_input(void) {
         if (held) st.buttons |= (u16)(1u << act);
     }
     if (env >= 0) dz = (float)env / 32767.0f;
-    ps2_pad_stick(dz, ps2_cfg.axis_scale, ps2_cfg.invert[0], value + PS2_ACT_LS_UP,
-                  &st.lx, &st.ly);
-    ps2_pad_stick(dz, ps2_cfg.axis_scale, ps2_cfg.invert[1], value + PS2_ACT_RS_UP,
-                  &st.rx, &st.ry);
+    ps2_pad_stick(dz, ps2_cfg.anti_deadzone, ps2_cfg.axis_scale, ps2_cfg.diagonal,
+                  ps2_cfg.invert[0], value + PS2_ACT_LS_UP, &st.lx, &st.ly);
+    ps2_pad_stick(dz, ps2_cfg.anti_deadzone, ps2_cfg.axis_scale, ps2_cfg.diagonal,
+                  ps2_cfg.invert[1], value + PS2_ACT_RS_UP, &st.rx, &st.ry);
 
     if (PS2_ENV("PS2_TRACE_PAD")) {
         static u16 last_src = 0xFFFF;
