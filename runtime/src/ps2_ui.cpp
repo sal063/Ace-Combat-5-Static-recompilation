@@ -711,7 +711,8 @@ void stick_view(int s, float size) {
     const float v[4] = { ps2_pad_axis_value(ay, 0), ps2_pad_axis_value(ay, 1),
                          ps2_pad_axis_value(ax, 0), ps2_pad_axis_value(ax, 1) };
     unsigned char bx, by;
-    ps2_pad_stick(ps2_cfg.deadzone, ps2_cfg.axis_scale, ps2_cfg.invert[s], v, &bx, &by);
+    ps2_pad_stick(ps2_cfg.deadzone, ps2_cfg.axis_scale, ps2_cfg.diagonal, ps2_cfg.invert[s], v,
+                  &bx, &by);
     float ox = bx < 127 ? -(127 - bx) / 127.0f : (bx - 127) / 128.0f;
     float oy = by < 127 ? -(127 - by) / 127.0f : (by - 127) / 128.0f;
 
@@ -742,12 +743,15 @@ void tab_analog() {
     static const char *const INVERT[] = {
         "Not inverted", "Invert left/right", "Invert up/down", "Invert left/right + up/down",
     };
-    bool ch = false;
+    bool ch = false, diag = ps2_cfg.diagonal;
     ch |= slider_pct("Analog dead zone", &ps2_cfg.deadzone, 0.0f, 1.0f);
     help("Stick movement that is ignored; past it, movement starts from zero. Raise it if the "
          "aircraft drifts.");
     ch |= slider_pct("Analog sensitivity", &ps2_cfg.axis_scale, 0.01f, 2.0f);
     help("Above 100%, sticks reach full travel before their edge.");
+    if (ImGui::Checkbox("Diagonal scale correction", &diag)) { ps2_cfg.diagonal = diag; ch = true; }
+    help("Stretches a round stick's circle to a square, so a full diagonal reaches both axes. "
+         "Turn it off for sticks that already reach the corners, such as the DualShock 2 and 3.");
     ch |= slider_pct("Button / trigger dead zone", &ps2_cfg.button_deadzone, 0.0f, 1.0f);
     help("How far a trigger, or a stick bound to a button, travels before it counts as pressed.");
     ch |= ImGui::Combo("Invert left stick", &ps2_cfg.invert[0], INVERT, 4);
@@ -757,6 +761,7 @@ void tab_analog() {
         ps2_settings_defaults(&d);
         ps2_cfg.deadzone = d.deadzone;
         ps2_cfg.axis_scale = d.axis_scale;
+        ps2_cfg.diagonal = d.diagonal;
         ps2_cfg.button_deadzone = d.button_deadzone;
         ps2_cfg.invert[0] = d.invert[0];
         ps2_cfg.invert[1] = d.invert[1];

@@ -187,6 +187,7 @@ void ps2_settings_defaults(ps2_settings *s) {
     s->deadzone = 0.0f;
     s->axis_scale = 1.0f;
     s->button_deadzone = 0.0f;
+    s->diagonal = 1;
 }
 
 static float clampf(float v, float lo, float hi) {
@@ -235,6 +236,7 @@ static void sanitize(ps2_settings *s) {
     s->deadzone = clampf(s->deadzone, 0.0f, 1.0f);
     s->axis_scale = clampf(s->axis_scale, 0.01f, 2.0f);
     s->button_deadzone = clampf(s->button_deadzone, 0.0f, 1.0f);
+    s->diagonal = s->diagonal != 0;
     s->invert[0] = clampi(s->invert[0], 0, 3);
     s->invert[1] = clampi(s->invert[1], 0, 3);
 }
@@ -281,6 +283,7 @@ static const cfg_field fields[] = {
     FI("input", "block_game_input_in_menu", block_input_in_menu, "1 on"),
     FF("analog", "deadzone", deadzone, "controller sticks, 0..1"),
     FF("analog", "axis_scale", axis_scale, "controller stick sensitivity, 0.01..2"),
+    FI("analog", "diagonal_correction", diagonal, "1: stretch the stick's circle to a square"),
     FF("analog", "button_deadzone", button_deadzone, "triggers and sticks bound to buttons, 0..1"),
     FI("analog", "invert_left", invert[0], "0 none, 1 left/right, 2 up/down, 3 both"),
     FI("analog", "invert_right", invert[1], "0 none, 1 left/right, 2 up/down, 3 both"),
@@ -470,13 +473,18 @@ float ps2_pad_past_deadzone(float f) {
     return copysignf(PS2_PAD_GAME_DEADZONE + (1.0f - PS2_PAD_GAME_DEADZONE) * fabsf(f), f);
 }
 
-void ps2_pad_stick(float deadzone, float axis_scale, int invert, const float v[4],
+void ps2_pad_stick(float deadzone, float axis_scale, int diagonal, int invert, const float v[4],
                    unsigned char *x, unsigned char *y) {
     float fx = v[3] - v[2], fy = v[1] - v[0], r = sqrtf(fx * fx + fy * fy);
     float s = r > deadzone && deadzone < 1.0f
             ? (r - deadzone) / (1.0f - deadzone) / r * axis_scale : 0.0f;
     fx *= s;
     fy *= s;
+    if (diagonal && s > 0.0f) {
+        float m = fmaxf(fabsf(fx), fabsf(fy)), mag = fminf(sqrtf(fx * fx + fy * fy), 1.0f);
+        fx = fx / m * mag;
+        fy = fy / m * mag;
+    }
     *x = stick_byte(ps2_pad_past_deadzone(clampf(invert & 1 ? -fx : fx, -1.0f, 1.0f)));
     *y = stick_byte(ps2_pad_past_deadzone(clampf(invert & 2 ? -fy : fy, -1.0f, 1.0f)));
 }

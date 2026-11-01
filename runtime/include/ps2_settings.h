@@ -66,6 +66,7 @@ typedef struct ps2_settings {
     float deadzone;
     float axis_scale;
     float button_deadzone;
+    int   diagonal;
     int   invert[2];
 } ps2_settings;
 
@@ -96,7 +97,7 @@ void ps2_settings_apply_game_patches(void);
 
 float ps2_pad_axis_value(int raw, int positive);
 float ps2_pad_past_deadzone(float f);
-void  ps2_pad_stick(float deadzone, float axis_scale, int invert, const float v[4],
+void  ps2_pad_stick(float deadzone, float axis_scale, int diagonal, int invert, const float v[4],
                     unsigned char *x, unsigned char *y);
 int   ps2_pad_trigger(float button_deadzone, float value, unsigned char *pressure);
 int   ps2_pad_button(float button_deadzone, float value);
