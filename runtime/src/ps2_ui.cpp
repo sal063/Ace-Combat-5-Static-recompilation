@@ -711,8 +711,8 @@ void stick_view(int s, float size) {
     const float v[4] = { ps2_pad_axis_value(ay, 0), ps2_pad_axis_value(ay, 1),
                          ps2_pad_axis_value(ax, 0), ps2_pad_axis_value(ax, 1) };
     unsigned char bx, by;
-    ps2_pad_stick(ps2_cfg.deadzone, ps2_cfg.axis_scale, ps2_cfg.invert[s], v, &bx, &by);
-    float rx = v[3] - v[2], ry = v[1] - v[0];
+    ps2_pad_stick(ps2_cfg.deadzone, ps2_cfg.axis_scale, ps2_cfg.diagonal, ps2_cfg.invert[s], v,
+                  &bx, &by);
     float ox = bx < 127 ? -(127 - bx) / 127.0f : (bx - 127) / 128.0f;
     float oy = by < 127 ? -(127 - by) / 127.0f : (by - 127) / 128.0f;
 
@@ -722,52 +722,46 @@ void stick_view(int s, float size) {
     float r = size * 0.5f - 4.0f;
     ImVec2 ctr = p + ImVec2(size * 0.5f, size * 0.5f);
     dl->AddRectFilled(p, p + ImVec2(size, size), IM_COL32(18, 24, 22, 255), 6.0f);
-    float scale = ps2_cfg.axis_scale > 0.01f ? ps2_cfg.axis_scale : 0.01f;
-    float dzr = ps2_cfg.deadzone / scale;
-    if (dzr > 0.0f)
-        dl->AddCircleFilled(ctr, r * (dzr < 1.0f ? dzr : 1.0f), IM_COL32(190, 70, 70, 80), 48);
     dl->AddLine(ctr - ImVec2(r, 0.0f), ctr + ImVec2(r, 0.0f), IM_COL32(60, 72, 66, 255));
     dl->AddLine(ctr - ImVec2(0.0f, r), ctr + ImVec2(0.0f, r), IM_COL32(60, 72, 66, 255));
-    dl->AddCircle(ctr, r, IM_COL32(130, 150, 140, 255), 64, 1.5f);
-    if (scale > 1.0f) dl->AddCircle(ctr, r / scale, IM_COL32(100, 120, 110, 200), 64, 1.0f);
-    dl->AddCircleFilled(ctr + ImVec2(rx * r, ry * r), 4.0f, IM_COL32(210, 210, 210, 220));
+    dl->AddRect(ctr - ImVec2(r, r), ctr + ImVec2(r, r), IM_COL32(130, 150, 140, 255), 0.0f, 0, 1.5f);
+    ImVec2 gdz(r * PS2_PAD_GAME_DEADZONE, r * PS2_PAD_GAME_DEADZONE);
+    dl->AddRect(ctr - gdz, ctr + gdz, IM_COL32(90, 150, 230, 200), 0.0f, 0, 1.5f);
     dl->AddCircleFilled(ctr + ImVec2(ox * r, oy * r), 5.5f, IM_COL32(100, 235, 130, 255));
     ImGui::Text("X %3u  Y %3u", (unsigned)bx, (unsigned)by);
 }
 
 void tab_analog() {
-    ImGui::TextWrapped("These are PCSX2's DualShock 2 analog settings, and the game receives what "
-                       "PCSX2 would send it for the same controller: sensitivity is applied first, "
-                       "a stick inside the dead zone's circle reads as centred, and movement "
-                       "outside it is passed on as it is, not rescaled. The defaults are PCSX2's: "
-                       "no dead zone and 133%% sensitivity.");
+    ImGui::TextWrapped("The game ignores the first half of each stick axis, so a moved axis starts "
+                       "past it.");
     env_note("PS2_PAD_DEADZONE", "overrides the analog dead zone");
     if (!ps2_video_gamepad())
         ImGui::TextDisabled("Connect a controller to see the live preview.");
     else
-        ImGui::TextDisabled("Preview: grey is the raw stick, green is what the game receives.");
+        ImGui::TextDisabled("Green: what the game receives. Blue: the game's dead zone.");
 
     static const char *const INVERT[] = {
         "Not inverted", "Invert left/right", "Invert up/down", "Invert left/right + up/down",
     };
-    bool ch = false;
+    bool ch = false, diag = ps2_cfg.diagonal;
     ch |= slider_pct("Analog dead zone", &ps2_cfg.deadzone, 0.0f, 1.0f);
-    help("PCSX2's Analog Deadzone: the fraction of stick movement that is ignored, for both "
-         "sticks. It is a circle, measured after sensitivity. Raise it if the aircraft drifts "
-         "with the stick released.");
+    help("Stick movement that is ignored; past it, movement starts from zero. Raise it if the "
+         "aircraft drifts.");
     ch |= slider_pct("Analog sensitivity", &ps2_cfg.axis_scale, 0.01f, 2.0f);
-    help("PCSX2's Analog Sensitivity: the stick axis scaling factor. PCSX2 recommends 130% to "
-         "140% for recent controllers such as the DualShock 4 or Xbox One controller.");
+    help("Above 100%, sticks reach full travel before their edge.");
+    if (ImGui::Checkbox("Diagonal scale correction", &diag)) { ps2_cfg.diagonal = diag; ch = true; }
+    help("Stretches a round stick's circle to a square, so a full diagonal reaches both axes. "
+         "Turn it off for sticks that already reach the corners, such as the DualShock 2 and 3.");
     ch |= slider_pct("Button / trigger dead zone", &ps2_cfg.button_deadzone, 0.0f, 1.0f);
-    help("PCSX2's Button/Trigger Deadzone: how far a trigger, or a stick bound to a button, "
-         "travels before it counts as pressed at all.");
+    help("How far a trigger, or a stick bound to a button, travels before it counts as pressed.");
     ch |= ImGui::Combo("Invert left stick", &ps2_cfg.invert[0], INVERT, 4);
     ch |= ImGui::Combo("Invert right stick", &ps2_cfg.invert[1], INVERT, 4);
-    if (ImGui::Button("Reset to PCSX2 defaults")) {
+    if (ImGui::Button("Reset to defaults")) {
         ps2_settings d;
         ps2_settings_defaults(&d);
         ps2_cfg.deadzone = d.deadzone;
         ps2_cfg.axis_scale = d.axis_scale;
+        ps2_cfg.diagonal = d.diagonal;
         ps2_cfg.button_deadzone = d.button_deadzone;
         ps2_cfg.invert[0] = d.invert[0];
         ps2_cfg.invert[1] = d.invert[1];
