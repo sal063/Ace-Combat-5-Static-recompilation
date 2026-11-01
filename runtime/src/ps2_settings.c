@@ -185,7 +185,7 @@ void ps2_settings_defaults(ps2_settings *s) {
     s->block_input_in_menu = 1;
     ps2_settings_default_bindings(s, 1, 1);
     s->deadzone = 0.0f;
-    s->axis_scale = 1.33f;
+    s->axis_scale = 1.0f;
     s->button_deadzone = 0.0f;
 }
 
@@ -279,9 +279,9 @@ static const cfg_field fields[] = {
     FI("display", "show_fps", show_fps, "1 on"),
     FF("display", "menu_scale", ui_scale, "0.5..3"),
     FI("input", "block_game_input_in_menu", block_input_in_menu, "1 on"),
-    FF("analog", "deadzone", deadzone, "PCSX2 Analog Deadzone, both sticks, 0..1"),
-    FF("analog", "axis_scale", axis_scale, "PCSX2 Analog Sensitivity, 0.01..2 (default 1.33)"),
-    FF("analog", "button_deadzone", button_deadzone, "PCSX2 Button/Trigger Deadzone, 0..1"),
+    FF("analog", "deadzone", deadzone, "controller sticks, 0..1"),
+    FF("analog", "axis_scale", axis_scale, "controller stick sensitivity, 0.01..2"),
+    FF("analog", "button_deadzone", button_deadzone, "triggers and sticks bound to buttons, 0..1"),
     FI("analog", "invert_left", invert[0], "0 none, 1 left/right, 2 up/down, 3 both"),
     FI("analog", "invert_right", invert[1], "0 none, 1 left/right, 2 up/down, 3 both"),
 };
@@ -459,30 +459,26 @@ float ps2_pad_axis_value(int raw, int positive) {
     return clampf(positive ? v : -v, 0.0f, 1.0f);
 }
 
+static unsigned char stick_byte(float f) {
+    float b = f < 0.0f ? 127.0f + f * 127.0f : 127.0f + f * 128.0f;
+    return (unsigned char)clampf(b + 0.5f, 0.0f, 255.0f);
+}
+
+/* A moved axis starts just past the game's own dead zone, so the game responds from the centre. */
+float ps2_pad_past_deadzone(float f) {
+    if (stick_byte(f) == 127) return f;
+    return copysignf(PS2_PAD_GAME_DEADZONE + (1.0f - PS2_PAD_GAME_DEADZONE) * fabsf(f), f);
+}
+
 void ps2_pad_stick(float deadzone, float axis_scale, int invert, const float v[4],
                    unsigned char *x, unsigned char *y) {
-    unsigned raw[4], px, nx, py, ny;
-    for (int i = 0; i < 4; i++)
-        raw[i] = (unsigned char)clampf(v[i] * axis_scale * 255.0f, 0.0f, 255.0f);
-    px = raw[invert & 1 ? 2 : 3];
-    nx = raw[invert & 1 ? 3 : 2];
-    py = raw[invert & 2 ? 0 : 1];
-    ny = raw[invert & 2 ? 1 : 0];
-#define MERGE(pos, neg) ((pos) != 0 ? 127u + ((pos) + 1u) / 2u : 127u - (neg) / 2u)
-    *x = (unsigned char)MERGE(px, nx);
-    *y = (unsigned char)MERGE(py, ny);
-#undef MERGE
-    if (deadzone > 0.0f) {
-        float fx = px != 0 ? (float)px / 255.0f : (float)nx / -255.0f;
-        float fy = py != 0 ? (float)py / 255.0f : (float)ny / -255.0f;
-        if (fx != 0.0f || fy != 0.0f) {
-            float theta = atan2f(fy, fx);
-            float dzx = cosf(theta) * deadzone, dzy = sinf(theta) * deadzone;
-            int in_x = fx < 0.0f ? fx > dzx : fx <= dzx;
-            int in_y = fy < 0.0f ? fy > dzy : fy <= dzy;
-            if (in_x && in_y) *x = *y = 127;
-        }
-    }
+    float fx = v[3] - v[2], fy = v[1] - v[0], r = sqrtf(fx * fx + fy * fy);
+    float s = r > deadzone && deadzone < 1.0f
+            ? (r - deadzone) / (1.0f - deadzone) / r * axis_scale : 0.0f;
+    fx *= s;
+    fy *= s;
+    *x = stick_byte(ps2_pad_past_deadzone(clampf(invert & 1 ? -fx : fx, -1.0f, 1.0f)));
+    *y = stick_byte(ps2_pad_past_deadzone(clampf(invert & 2 ? -fy : fy, -1.0f, 1.0f)));
 }
 
 int ps2_pad_trigger(float button_deadzone, float value, unsigned char *pressure) {
