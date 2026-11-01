@@ -23,6 +23,7 @@ float g_dpi = 1.0f;
 VkFormat g_color_format;
 
 enum { CAP_NONE, CAP_KEY, CAP_PAD };
+const char *const MOUSE_LOOK = "Hold to steer the right stick";
 int g_cap = CAP_NONE, g_cap_act, g_cap_slot;
 bool g_cap_armed;
 Uint64 g_cap_start;
@@ -114,11 +115,14 @@ void apply_style() {
 }
 
 void bind_key(int act, int slot, int sc) {
-    if (sc > 0)
+    if (sc > 0) {
         for (int a = 0; a < PS2_ACT_COUNT; a++)
             for (int k = 0; k < PS2_BIND_SLOTS; k++)
                 if (ps2_cfg.key[a][k] == sc) ps2_cfg.key[a][k] = 0;
-    ps2_cfg.key[act][slot] = sc;
+        for (int k = 0; k < PS2_BIND_SLOTS; k++)
+            if (ps2_cfg.mouse_look[k] == sc) ps2_cfg.mouse_look[k] = 0;
+    }
+    (act < 0 ? ps2_cfg.mouse_look : ps2_cfg.key[act])[slot] = sc;
     changed(0);
 }
 
@@ -129,6 +133,11 @@ void bind_pad(int act, int slot, int code) {
                 if (ps2_cfg.pad[a][k] == code) ps2_cfg.pad[a][k] = 0;
     ps2_cfg.pad[act][slot] = code;
     changed(0);
+}
+
+void bind(int kind, int act, int slot, int code) {
+    if (kind == CAP_PAD) bind_pad(act, slot, code);
+    else bind_key(act, slot, code);
 }
 
 void start_capture(int kind, int act, int slot) {
@@ -148,6 +157,7 @@ void update_capture_arming() {
     const bool *ks = SDL_GetKeyboardState(&nk);
     for (int i = 0; ks && i < nk; i++)
         if (ks[i]) return;
+    if (SDL_GetMouseState(nullptr, nullptr)) return;
     SDL_Gamepad *g = ps2_video_gamepad();
     memset(g_cap_base, 0, sizeof g_cap_base);
     if (g) {
@@ -167,7 +177,7 @@ bool capture_event(const SDL_Event *e) {
         if (sc == SDL_SCANCODE_ESCAPE) { end_capture(); return true; }
         bool clear = sc == SDL_SCANCODE_BACKSPACE || sc == SDL_SCANCODE_DELETE;
         if (g_cap == CAP_KEY) bind_key(g_cap_act, g_cap_slot, clear ? 0 : (int)sc);
-        else if (clear) bind_pad(g_cap_act, g_cap_slot, 0);
+        else if (clear) bind(g_cap, g_cap_act, g_cap_slot, 0);
         else return true;
         end_capture();
         return true;
@@ -181,6 +191,25 @@ bool capture_event(const SDL_Event *e) {
             end_capture();
         }
         return true;
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_WHEEL: {
+        if (g_cap != CAP_KEY) return false;
+        if (e->type == SDL_EVENT_MOUSE_BUTTON_DOWN && e->button.button == SDL_BUTTON_LEFT
+            && ImGui::IsAnyItemHovered())
+            return false;
+        int code = 0;
+        if (e->type == SDL_EVENT_MOUSE_BUTTON_DOWN && e->button.button < PS2_MOUSE_WHEEL_UP)
+            code = PS2_KEY_MOUSE + e->button.button;
+        else if (e->type == SDL_EVENT_MOUSE_WHEEL && e->wheel.y != 0.0f)
+            code = PS2_KEY_MOUSE
+                 + ((e->wheel.y < 0.0f) != (e->wheel.direction == SDL_MOUSEWHEEL_FLIPPED)
+                    ? PS2_MOUSE_WHEEL_DOWN : PS2_MOUSE_WHEEL_UP);
+        if (code && g_cap_armed) {
+            bind_key(g_cap_act, g_cap_slot, code);
+            end_capture();
+        }
+        return true;
+    }
     case SDL_EVENT_GAMEPAD_AXIS_MOTION:
         if (g_cap == CAP_PAD && g_cap_armed && e->gaxis.axis < SDL_GAMEPAD_AXIS_COUNT) {
             int axis = e->gaxis.axis;
@@ -209,42 +238,49 @@ const Group GROUPS[] = {
     { "Right stick",  { PS2_ACT_RS_UP, PS2_ACT_RS_DOWN, PS2_ACT_RS_LEFT, PS2_ACT_RS_RIGHT } },
 };
 
+void bind_cell(int kind, int act, int slot) {
+    int code = act < 0 ? ps2_cfg.mouse_look[slot]
+             : kind == CAP_PAD ? ps2_cfg.pad[act][slot] : ps2_cfg.key[act][slot];
+    bool capturing = g_cap == kind && g_cap_act == act && g_cap_slot == slot;
+    const char *label = capturing ? "..."
+                      : kind == CAP_PAD ? ps2_padbind_name(code) : ps2_key_name(code);
+    bool dim = !code && !capturing;
+    ImGui::PushID(kind * 1000 + act * 4 + slot);
+    if (dim) ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    if (ImGui::Button(label, ImVec2(-FLT_MIN, 0.0f))) start_capture(kind, act, slot);
+    if (dim) ImGui::PopStyleColor();
+    if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) bind(kind, act, slot, 0);
+    ImGui::SetItemTooltip("Click to rebind, right-click to clear.");
+    ImGui::PopID();
+}
+
+bool begin_bind_table(const char *id) {
+    if (!ImGui::BeginTable(id, 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH
+                                  | ImGuiTableFlags_SizingStretchProp))
+        return false;
+    ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch, 1.1f);
+    ImGui::TableSetupColumn("Primary", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+    ImGui::TableSetupColumn("Secondary", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+    return true;
+}
+
+void bind_row(int kind, int act) {
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(0);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(act < 0 ? MOUSE_LOOK : ps2_action_name(act));
+    for (int slot = 0; slot < PS2_BIND_SLOTS; slot++) {
+        ImGui::TableSetColumnIndex(1 + slot);
+        bind_cell(kind, act, slot);
+    }
+}
+
 void binding_table(bool pad) {
-    const ImGuiTableFlags tf = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH
-                             | ImGuiTableFlags_SizingStretchProp;
     for (const Group &grp : GROUPS) {
         ImGui::SeparatorText(grp.title);
         ImGui::PushID(grp.title);
-        if (ImGui::BeginTable("binds", 3, tf)) {
-            ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch, 1.1f);
-            ImGui::TableSetupColumn("Primary", ImGuiTableColumnFlags_WidthStretch, 1.0f);
-            ImGui::TableSetupColumn("Secondary", ImGuiTableColumnFlags_WidthStretch, 1.0f);
-            for (int act : grp.acts) {
-                ImGui::TableNextRow();
-                ImGui::TableSetColumnIndex(0);
-                ImGui::AlignTextToFramePadding();
-                ImGui::TextUnformatted(ps2_action_name(act));
-                for (int slot = 0; slot < PS2_BIND_SLOTS; slot++) {
-                    ImGui::TableSetColumnIndex(1 + slot);
-                    ImGui::PushID(act * 4 + slot);
-                    int code = pad ? ps2_cfg.pad[act][slot] : ps2_cfg.key[act][slot];
-                    bool capturing = g_cap == (pad ? CAP_PAD : CAP_KEY)
-                                  && g_cap_act == act && g_cap_slot == slot;
-                    const char *label = capturing ? "..."
-                                      : pad ? ps2_padbind_name(code) : ps2_key_name(code);
-                    bool dim = !code && !capturing;
-                    if (dim) ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-                    if (ImGui::Button(label, ImVec2(-FLT_MIN, 0.0f)))
-                        start_capture(pad ? CAP_PAD : CAP_KEY, act, slot);
-                    if (dim) ImGui::PopStyleColor();
-                    if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
-                        if (pad) bind_pad(act, slot, 0);
-                        else bind_key(act, slot, 0);
-                    }
-                    ImGui::SetItemTooltip("Click to rebind, right-click to clear.");
-                    ImGui::PopID();
-                }
-            }
+        if (begin_bind_table("binds")) {
+            for (int act : grp.acts) bind_row(pad ? CAP_PAD : CAP_KEY, act);
             ImGui::EndTable();
         }
         ImGui::PopID();
@@ -266,17 +302,17 @@ void draw_capture_popup() {
         ImGui::EndPopup();
         return;
     }
-    ImGui::Text("%s  (%s)", ps2_action_name(g_cap_act), g_cap_slot ? "secondary" : "primary");
+    ImGui::Text("%s  (%s)", g_cap_act < 0 ? MOUSE_LOOK : ps2_action_name(g_cap_act),
+                g_cap_slot ? "secondary" : "primary");
     ImGui::Spacing();
     ImGui::TextColored(ACCENT, "%s", g_cap == CAP_KEY
-                       ? "Press a key..."
+                       ? "Press a key, click a mouse button or turn the wheel..."
                        : "Press a button, or push a stick or trigger...");
     if (!g_cap_armed) ImGui::TextDisabled("Release all keys and buttons first.");
     ImGui::TextDisabled("Esc cancels, Backspace clears.");
     ImGui::Spacing();
     if (ImGui::Button("Clear binding")) {
-        if (g_cap == CAP_KEY) bind_key(g_cap_act, g_cap_slot, 0);
-        else bind_pad(g_cap_act, g_cap_slot, 0);
+        bind(g_cap, g_cap_act, g_cap_slot, 0);
         end_capture();
     }
     ImGui::SameLine();
@@ -537,7 +573,7 @@ void tab_quick() {
     if (ImGui::Checkbox("Show FPS counter", &fps)) { ps2_cfg.show_fps = fps; changed(0); }
 
     ImGui::SeparatorText("Controls");
-    if (ImGui::Button("Keyboard bindings")) g_want_tab = TAB_KEYBOARD;
+    if (ImGui::Button("Keyboard & mouse bindings")) g_want_tab = TAB_KEYBOARD;
     ImGui::SameLine();
     if (ImGui::Button("Controller bindings")) g_want_tab = TAB_CONTROLLER;
     ImGui::SameLine();
@@ -659,15 +695,46 @@ void tab_post() {
     }
 }
 
+void mouse_controls() {
+    static const char *const LR[] = { "Yaw (L2/R2)", "Roll (left stick)" };
+    ImGui::SeparatorText("Mouse");
+    bool ch = false, on = ps2_cfg.mouse_enabled, inv = ps2_cfg.mouse_invert_y;
+    if (ImGui::Checkbox("Fly with the mouse", &on)) { ps2_cfg.mouse_enabled = on; ch = true; }
+    ch |= ImGui::Combo("Mouse left/right", &ps2_cfg.mouse_roll, LR, 2);
+    if (ImGui::Checkbox("Invert up/down", &inv)) { ps2_cfg.mouse_invert_y = inv; ch = true; }
+    help("Off, mouse up is nose down (left stick up), like pushing a stick forward. On, mouse up "
+         "is nose up.");
+    ch |= slider_pct("Flight sensitivity", &ps2_cfg.mouse_sens, 0.1f, 3.0f);
+    help("The flight controls follow how fast the mouse moves and centre as soon as it stops. "
+         "At 100%, 3000 counts a second push them all the way.");
+    ImGui::TextWrapped("While the binding below is held, the mouse moves the right stick instead "
+                       "and the flight controls centre. Letting go centres the right stick.");
+    ch |= slider_pct("Look sensitivity", &ps2_cfg.mouse_look_sens, 0.1f, 3.0f);
+    help("At 100%, each count of mouse movement turns the view 0.1 degree, so 1800 counts look "
+         "straight behind and 900 counts straight up or down.");
+    if (begin_bind_table("look")) {
+        bind_row(CAP_KEY, -1);
+        ImGui::EndTable();
+    }
+    if (ch) changed(0);
+}
+
 void tab_keyboard() {
-    ImGui::TextWrapped("Click a binding, then press the key you want. Esc cancels; Backspace or a "
-                       "right-click clears it. Each key drives one action, so binding a key "
-                       "again moves it here.");
-    if (ImGui::Button("Reset keyboard to defaults")) {
+    ImGui::TextWrapped("Click a binding, then press a key, click a mouse button or turn the "
+                       "wheel. Esc cancels; Backspace or a right-click clears it. Each input "
+                       "drives one action, so binding it again moves it here.");
+    if (ImGui::Button("Reset keyboard and mouse to defaults")) {
+        ps2_settings d;
+        ps2_settings_defaults(&d);
         ps2_settings_default_bindings(&ps2_cfg, 1, 0);
+        ps2_cfg.mouse_roll = d.mouse_roll;
+        ps2_cfg.mouse_invert_y = d.mouse_invert_y;
+        ps2_cfg.mouse_sens = d.mouse_sens;
+        ps2_cfg.mouse_look_sens = d.mouse_look_sens;
         changed(0);
     }
     binding_table(false);
+    mouse_controls();
 }
 
 void tab_controller() {
@@ -711,8 +778,7 @@ void stick_view(int s, float size) {
     const float v[4] = { ps2_pad_axis_value(ay, 0), ps2_pad_axis_value(ay, 1),
                          ps2_pad_axis_value(ax, 0), ps2_pad_axis_value(ax, 1) };
     unsigned char bx, by;
-    ps2_pad_stick(ps2_cfg.deadzone, ps2_cfg.axis_scale, ps2_cfg.invert[s], v, &bx, &by);
-    float rx = v[3] - v[2], ry = v[1] - v[0];
+    ps2_pad_stick(ps2_cfg.deadzone, ps2_cfg.axis_scale, ps2_cfg.invert[s], v, nullptr, &bx, &by);
     float ox = bx < 127 ? -(127 - bx) / 127.0f : (bx - 127) / 128.0f;
     float oy = by < 127 ? -(127 - by) / 127.0f : (by - 127) / 128.0f;
 
@@ -722,48 +788,38 @@ void stick_view(int s, float size) {
     float r = size * 0.5f - 4.0f;
     ImVec2 ctr = p + ImVec2(size * 0.5f, size * 0.5f);
     dl->AddRectFilled(p, p + ImVec2(size, size), IM_COL32(18, 24, 22, 255), 6.0f);
-    float scale = ps2_cfg.axis_scale > 0.01f ? ps2_cfg.axis_scale : 0.01f;
-    float dzr = ps2_cfg.deadzone / scale;
-    if (dzr > 0.0f)
-        dl->AddCircleFilled(ctr, r * (dzr < 1.0f ? dzr : 1.0f), IM_COL32(190, 70, 70, 80), 48);
     dl->AddLine(ctr - ImVec2(r, 0.0f), ctr + ImVec2(r, 0.0f), IM_COL32(60, 72, 66, 255));
     dl->AddLine(ctr - ImVec2(0.0f, r), ctr + ImVec2(0.0f, r), IM_COL32(60, 72, 66, 255));
-    dl->AddCircle(ctr, r, IM_COL32(130, 150, 140, 255), 64, 1.5f);
-    if (scale > 1.0f) dl->AddCircle(ctr, r / scale, IM_COL32(100, 120, 110, 200), 64, 1.0f);
-    dl->AddCircleFilled(ctr + ImVec2(rx * r, ry * r), 4.0f, IM_COL32(210, 210, 210, 220));
+    dl->AddRect(ctr - ImVec2(r, r), ctr + ImVec2(r, r), IM_COL32(130, 150, 140, 255), 0.0f, 0, 1.5f);
+    ImVec2 gdz(r * PS2_PAD_GAME_DEADZONE, r * PS2_PAD_GAME_DEADZONE);
+    dl->AddRect(ctr - gdz, ctr + gdz, IM_COL32(90, 150, 230, 200), 0.0f, 0, 1.5f);
     dl->AddCircleFilled(ctr + ImVec2(ox * r, oy * r), 5.5f, IM_COL32(100, 235, 130, 255));
     ImGui::Text("X %3u  Y %3u", (unsigned)bx, (unsigned)by);
 }
 
 void tab_analog() {
-    ImGui::TextWrapped("These are PCSX2's DualShock 2 analog settings, and the game receives what "
-                       "PCSX2 would send it for the same controller: sensitivity is applied first, "
-                       "a stick inside the dead zone's circle reads as centred, and movement "
-                       "outside it is passed on as it is, not rescaled. The defaults are PCSX2's: "
-                       "no dead zone and 133%% sensitivity.");
+    ImGui::TextWrapped("Controller sticks only. The game ignores the first half of each stick axis, "
+                       "so a moved axis starts past it.");
     env_note("PS2_PAD_DEADZONE", "overrides the analog dead zone");
     if (!ps2_video_gamepad())
         ImGui::TextDisabled("Connect a controller to see the live preview.");
     else
-        ImGui::TextDisabled("Preview: grey is the raw stick, green is what the game receives.");
+        ImGui::TextDisabled("Green: what the game receives. Blue: the game's dead zone.");
 
     static const char *const INVERT[] = {
         "Not inverted", "Invert left/right", "Invert up/down", "Invert left/right + up/down",
     };
     bool ch = false;
     ch |= slider_pct("Analog dead zone", &ps2_cfg.deadzone, 0.0f, 1.0f);
-    help("PCSX2's Analog Deadzone: the fraction of stick movement that is ignored, for both "
-         "sticks. It is a circle, measured after sensitivity. Raise it if the aircraft drifts "
-         "with the stick released.");
+    help("Stick movement that is ignored; past it, movement starts from zero. Raise it if the "
+         "aircraft drifts.");
     ch |= slider_pct("Analog sensitivity", &ps2_cfg.axis_scale, 0.01f, 2.0f);
-    help("PCSX2's Analog Sensitivity: the stick axis scaling factor. PCSX2 recommends 130% to "
-         "140% for recent controllers such as the DualShock 4 or Xbox One controller.");
+    help("Above 100%, sticks reach full travel before their edge.");
     ch |= slider_pct("Button / trigger dead zone", &ps2_cfg.button_deadzone, 0.0f, 1.0f);
-    help("PCSX2's Button/Trigger Deadzone: how far a trigger, or a stick bound to a button, "
-         "travels before it counts as pressed at all.");
+    help("How far a trigger, or a stick bound to a button, travels before it counts as pressed.");
     ch |= ImGui::Combo("Invert left stick", &ps2_cfg.invert[0], INVERT, 4);
     ch |= ImGui::Combo("Invert right stick", &ps2_cfg.invert[1], INVERT, 4);
-    if (ImGui::Button("Reset to PCSX2 defaults")) {
+    if (ImGui::Button("Reset to defaults")) {
         ps2_settings d;
         ps2_settings_defaults(&d);
         ps2_cfg.deadzone = d.deadzone;
@@ -829,7 +885,7 @@ void draw_menu() {
         if (ImGui::BeginTabBar("tabs")) {
             static const char *const TABS[] = {
                 "Quick", "Display", "Rendering", "Post-processing",
-                "Keyboard", "Controller", "Analog & dead zones",
+                "Keyboard & mouse", "Controller", "Analog & dead zones",
             };
             static void (*const PAGES[])() = {
                 tab_quick, tab_display, tab_rendering, tab_post,
